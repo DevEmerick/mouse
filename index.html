@@ -416,7 +416,6 @@
     }
 
     function resetGame() {
-      // attackDelay inserido para que a velocidade do ataque varie imprevisivelmente
       bot = { x: 120, y: 120, radius: 18, baseSpeed: 170, color: '#ff5f6d', eyeAngle: 0, attackDelay: 2.0 };
       projectiles = []; particles = []; enemies = []; bossClones = [];
       spawnTimer = 0; botAttackTimer = 0; botState = 'CHASE'; botStateTimer = 0;
@@ -587,7 +586,7 @@
       }
     }
 
-    // ALEATÓRIO DE VERDADE: Todas as opções disponíveis desde o início e sem barreiras de tempo
+    // CORREÇÃO DA ANTI-TRAPAÇA: 100% de randomização real das skills desde o início do jogo.
     function chooseBossPattern() {
       const options = ['DASH', 'SHOOT', 'TELEPORT', 'HOMING', 'PURSUE', 'CLONE', 'SWEEP', 'SUMMON', 'RING', 'BERSERK'];
       const filtered = options.filter(p => p !== botState);
@@ -618,21 +617,22 @@
           const agility = 1 + Math.min(1.2, phase / 25);
           bot.x += chaseDirX * bot.baseSpeed * agility * dt; bot.y += chaseDirY * bot.baseSpeed * agility * dt;
           
+          // Se jogador grudar no boss, ativa um ataque aleatório. Se o jogador ficar longe, respeita o tempo de recarga.
           if (distance < 160 && botAttackTimer > 0.7) { 
             botAttackTimer = 0; botStateTimer = 0; 
             botState = chooseBossPattern(); 
             dashVector = { x: chaseDirX, y: chaseDirY }; 
             spawnParticles(bot.x, bot.y, '#ffb547', 14, 2.0, 160); 
             teleportTarget = null; 
-            bot.attackDelay = rand(1.2, 2.5); // Rola um novo tempo pro próximo ataque
+            bot.attackDelay = rand(1.2, 2.5); 
           }
-          else if (botAttackTimer > bot.attackDelay) { 
+          else if (bot.attackDelay && botAttackTimer > bot.attackDelay) { 
             botAttackTimer = 0; botStateTimer = 0; 
             botState = chooseBossPattern(); 
             dashVector = { x: chaseDirX, y: chaseDirY }; 
             spawnParticles(bot.x, bot.y, '#e8eefc', 18, 2.2, 170); 
             teleportTarget = null; 
-            bot.attackDelay = rand(1.2, 2.5); // Rola um novo tempo pro próximo ataque (aleatório, sem ligação com a 'fase')
+            bot.attackDelay = rand(1.2, 2.5); 
           }
           break;
         case 'DASH':
@@ -645,11 +645,11 @@
           if (botStateTimer < 0.08) bot.color = '#ffb547';
           bot.x += ((aim.x - bot.x) / pLen) * (bot.baseSpeed * 2.2) * dt; bot.y += ((aim.y - bot.y) / pLen) * (bot.baseSpeed * 2.2) * dt;
           
+          // Anti-metralhadora e anti-drible: Garante que os tiros saiam apenas 1 vez por fase
           if (botStateTimer > 0.12 && botStateTimer - dt <= 0.12) {
             spawnParticles(bot.x, bot.y, '#ffb547', 12, 1.5, 120);
             spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 3, 400 + phase * 2, '#ffb547');
           }
-
           if (botStateTimer > 0.26) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'SHOOT':
@@ -672,7 +672,7 @@
           break;
         case 'CLONE':
           if (botStateTimer < 0.12) { bot.color = '#f0f4ff'; bot.alpha = 0.25; }
-          if (botStateTimer > 0.14 && botStateTimer < 0.20 && bossClones.length === 0) {
+          if (botStateTimer > 0.14 && botStateTimer - dt <= 0.14 && bossClones.length === 0) {
             const count = 2 + Math.min(2, Math.floor(phase / 16));
             for (let i = 0; i < count; i++) {
               const ang = (Math.PI * 2 * i) / count + Math.random() * 0.35; const dist = rand(120, 220);
@@ -690,7 +690,6 @@
           if (Math.floor(botStateTimer * 10) > Math.floor((botStateTimer - dt) * 10) && Math.floor(botStateTimer * 10) % 3 === 0) {
             spawnBossSweep(bot.x, bot.y, Math.atan2(mouse.y - bot.y, mouse.x - bot.x), 1.1, 4, 360 + phase * 3, '#47e6a3');
           }
-
           if (botStateTimer > 1.1) { botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'SUMMON':
