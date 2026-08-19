@@ -84,9 +84,17 @@ export default async function handler(req, res) {
     }
 
     try {
-      const placar = clientRecord.length > 0
-        ? clientRecord
-        : (await fetchLatestLeaderboard(binUrl, apiKey)).record;
+      let placar = clientRecord;
+
+      try {
+        const latest = await fetchLatestLeaderboard(binUrl, apiKey);
+        placar = latest.record;
+      } catch (error) {
+        if (!placar.length) {
+          throw error;
+        }
+      }
+
       const jogadorIndex = placar.findIndex((p) => p && p.nome === nome);
       let updated = false;
       let syncedTime = tempo;
@@ -117,8 +125,9 @@ export default async function handler(req, res) {
         updated = true;
       }
 
-      placar.sort((a, b) => Number(b.tempo || 0) - Number(a.tempo || 0));
-      const record = placar.slice(0, 10);
+      const mergedRecord = [...placar];
+      mergedRecord.sort((a, b) => Number(b.tempo || 0) - Number(a.tempo || 0));
+      const record = mergedRecord.slice(0, 10);
 
       if (updated) {
         const putResponse = await fetch(binUrl, {
