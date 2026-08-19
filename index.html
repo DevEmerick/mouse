@@ -381,7 +381,8 @@
     let blackHoles = [];    
     let slowZones = [];     
     let kamehamehas = [];   
-    let homingMissiles = []; // Foguete Teleguiado com visual de míssil aerodinâmico e 50% mais veloz
+    let homingMissiles = []; 
+    let pacMans = [];       // Habilidade Nova: O Pac-Man Caçador que come bolas e cresce
     let spawnTimer = 0;
     let botAttackTimer = 0;
     let botState = 'CHASE';
@@ -421,7 +422,7 @@
 
     function resetGame() {
       bot = { x: 120, y: 120, radius: 18, baseSpeed: 170, color: '#ff5f6d', eyeAngle: 0, attackDelay: 2.0 };
-      projectiles = []; particles = []; enemies = []; bossClones = []; blackHoles = []; slowZones = []; kamehamehas = []; homingMissiles = [];
+      projectiles = []; particles = []; enemies = []; bossClones = []; blackHoles = []; slowZones = []; kamehamehas = []; homingMissiles = []; pacMans = [];
       spawnTimer = 0; botAttackTimer = 0; botState = 'CHASE'; botStateTimer = 0;
       dashVector = { x: 0, y: 0 }; teleportTarget = null; bot.alpha = 1;
       state.shake = 0; state.flash = 0; titleFlashTimer = 0; state.ended = false;
@@ -537,20 +538,36 @@
       spawnParticles(x, y, '#ffb547', 10, 1.5, 100);
     }
 
-    // Foguete Teleguiado: Velocidade aumentada em 50% (360px/s) e com duração de 3 segundos
     function spawnHomingMissile() {
       const angle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
       homingMissiles.push({
         x: bot.x,
         y: bot.y,
-        vx: Math.cos(angle) * 360, // Velocidade aumentada em 50%
+        vx: Math.cos(angle) * 360, 
         vy: Math.sin(angle) * 360,
         radius: 5,
         life: 3.0, 
-        turnRate: 4.2,            // Curva mais agressiva
+        turnRate: 4.2,            
         color: '#ff5f6d'
       });
       spawnParticles(bot.x, bot.y, '#ff5f6d', 18, 2.0, 200);
+    }
+
+    // Fábrica do Pac-Man Caçador (Mesma velocidade do foguete, cresce 25% ao comer, some após 5 bolas)
+    function spawnPacMan() {
+      const angle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
+      pacMans.push({
+        x: bot.x,
+        y: bot.y,
+        vx: Math.cos(angle) * 360,
+        vy: Math.sin(angle) * 360,
+        radius: 14,             // Tamanho inicial
+        eatenCount: 0,          // Conta quantas bolas comeu
+        maxEaten: 5,            // Some depois de comer 5 bolas
+        turnRate: 3.5,
+        color: '#ffb547'        // Amarelo clássico do Pac-Man
+      });
+      spawnParticles(bot.x, bot.y, '#ffb547', 20, 2.0, 200);
     }
 
     function spawnKamehameha() {
@@ -654,8 +671,9 @@
       }
     }
 
+    // Incluindo PACMAN no sorteio do chefe
     function chooseBossPattern() {
-      const options = ['DASH', 'SHOOT', 'TELEPORT', 'HOMING', 'PURSUE', 'CLONE', 'SWEEP', 'SUMMON', 'RING', 'BERSERK', 'BLACKHOLE', 'SLOWZONE', 'KAMEHAMEHA', 'HOMINGMISSILE'];
+      const options = ['DASH', 'SHOOT', 'TELEPORT', 'HOMING', 'PURSUE', 'CLONE', 'SWEEP', 'SUMMON', 'RING', 'BERSERK', 'BLACKHOLE', 'SLOWZONE', 'KAMEHAMEHA', 'HOMINGMISSILE', 'PACMAN'];
       const filtered = options.filter(p => p !== botState);
       return (filtered.length ? filtered : options)[Math.floor(Math.random() * (filtered.length || options.length))];
     }
@@ -805,6 +823,13 @@
           }
           if (botStateTimer > 0.6) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
+        case 'PACMAN':
+          if (botStateTimer < 0.12) {
+            bot.color = '#ffb547';
+            spawnPacMan();
+          }
+          if (botStateTimer > 0.6) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
+          break;
       }
       bot.x = clamp(bot.x, 18, world.width - 18); bot.y = clamp(bot.y, 18, world.height - 18);
     }
@@ -847,7 +872,7 @@
       }
     }
 
-    // Foguete Teleguiado Aprimorado: Atualizado para 3s e 50% mais rápido com lógica de rastro
+    // Foguete Teleguiado Aprimorado: Perseguição corrigida e velocidade em 360px/s
     function updateHomingMissiles(dt) {
       for (let i = homingMissiles.length - 1; i >= 0; i--) {
         const hm = homingMissiles[i];
@@ -856,7 +881,7 @@
         const dx = mouse.x - hm.x;
         const dy = mouse.y - hm.y;
         const dist = Math.hypot(dx, dy) || 1;
-        const speed = Math.hypot(hm.vx, hm.vy);
+        const speed = Math.hypot(hm.vx, hm.vy) || 360;
 
         hm.vx += ((dx / dist) * speed - hm.vx) * hm.turnRate * dt;
         hm.vy += ((dy / dist) * speed - hm.vy) * hm.turnRate * dt;
@@ -864,7 +889,6 @@
         hm.x += hm.vx * dt;
         hm.y += hm.vy * dt;
 
-        // Partículas de fumaça e fogo na cauda do foguete para dar efeito visual bacana
         if (Math.random() < 0.6) {
           particles.push({
             x: hm.x, y: hm.y,
@@ -883,8 +907,62 @@
         }
 
         if (hm.life <= 0) {
-          spawnParticles(hm.x, hm.y, hm.color, 12, 1.5, 120);
+          spawnParticles(hm.x, hm.y, hm.color, 10, 1.2, 100);
           homingMissiles.splice(i, 1);
+        }
+      }
+    }
+
+    // Lógica do Pac-Man Caçador: Persegue o mouse, come bolas da tela, cresce 25% e some após 5 bolas
+    function updatePacMans(dt) {
+      for (let i = pacMans.length - 1; i >= 0; i--) {
+        const pm = pacMans[i];
+
+        const dx = mouse.x - pm.x;
+        const dy = mouse.y - pm.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const speed = 360; // Mesma velocidade do foguete
+
+        pm.vx += ((dx / dist) * speed - pm.vx) * pm.turnRate * dt;
+        pm.vy += ((dy / dist) * speed - pm.vy) * pm.turnRate * dt;
+
+        pm.x += pm.vx * dt;
+        pm.y += pm.vy * dt;
+
+        // Tenta "comer" projéteis ou inimigos menores no caminho
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const en = enemies[j];
+          if (Math.hypot(pm.x - en.x, pm.y - en.y) < pm.radius + en.radius) {
+            spawnParticles(en.x, en.y, '#ffb547', 8, 1.2, 120);
+            enemies.splice(j, 1);
+            pm.eatenCount++;
+            pm.radius *= 1.25; // Cresce 25% de tamanho
+            break;
+          }
+        }
+
+        for (let j = projectiles.length - 1; j >= 0; j--) {
+          const pr = projectiles[j];
+          if (Math.hypot(pm.x - pr.x, pm.y - pr.y) < pm.radius + pr.radius) {
+            spawnParticles(pr.x, pr.y, '#ffb547', 6, 1.0, 100);
+            projectiles.splice(j, 1);
+            pm.eatenCount++;
+            pm.radius *= 1.25; // Cresce 25% de tamanho
+            break;
+          }
+        }
+
+        // Se encostar no mouse, fim de jogo
+        if (Math.hypot(mouse.x - pm.x, mouse.y - pm.y) < pm.radius + mouse.radius) {
+          spawnParticles(mouse.x, mouse.y, '#ffb547', 25, 2.5, 250);
+          endGame('Você foi devorado pelo Pac-Man');
+          return;
+        }
+
+        // Some depois de comer 5 bolas
+        if (pm.eatenCount >= pm.maxEaten) {
+          spawnParticles(pm.x, pm.y, '#ffb547', 15, 2.0, 150);
+          pacMans.splice(i, 1);
         }
       }
     }
@@ -1053,7 +1131,7 @@
       }
     }
 
-    // NOVO VISUAL DO FOGUETE: Desenhado em formato de míssil aerodinâmico com ponta e nadadeiras
+    // Renderização do Foguete Míssil Aerodinâmico
     function drawHomingMissiles() {
       for (const hm of homingMissiles) {
         ctx.save();
@@ -1064,22 +1142,49 @@
         ctx.shadowBlur = 14;
         ctx.shadowColor = '#ff5f6d';
 
-        // Corpo principal do míssil (formato de ogiva)
         ctx.fillStyle = '#ff5f6d';
         ctx.beginPath();
-        ctx.moveTo(10, 0);   // Ponta dianteira
-        ctx.lineTo(-6, -4);  // Corpo superior
-        ctx.lineTo(-10, -7); // Nadadeira superior
-        ctx.lineTo(-8, 0);   // Base central
-        ctx.lineTo(-10, 7);  // Nadadeira inferior
-        ctx.lineTo(-6, 4);   // Corpo inferior
+        ctx.moveTo(10, 0);   
+        ctx.lineTo(-6, -4);  
+        ctx.lineTo(-10, -7); 
+        ctx.lineTo(-8, 0);   
+        ctx.lineTo(-10, 7);  
+        ctx.lineTo(-6, 4);   
         ctx.closePath();
         ctx.fill();
 
-        // Detalhe brilhante na ponta
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
         ctx.arc(6, 0, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    // Renderização do Pac-Man Caçador (Com visual clássico circular e boca aberta)
+    function drawPacMans() {
+      for (const pm of pacMans) {
+        ctx.save();
+        const angle = Math.atan2(pm.vy, pm.vx);
+        ctx.translate(pm.x, pm.y);
+        ctx.rotate(angle);
+
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = pm.color;
+
+        ctx.fillStyle = pm.color;
+        ctx.beginPath();
+        // Desenha o Pac-Man com a boca aberta piscando na direção do movimento
+        ctx.arc(0, 0, pm.radius, 0.25 * Math.PI, 1.75 * Math.PI);
+        ctx.lineTo(0, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        // Olhinho do Pac-Man
+        ctx.fillStyle = '#08111c';
+        ctx.beginPath();
+        ctx.arc(pm.radius * 0.3, -pm.radius * 0.4, pm.radius * 0.2, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
@@ -1217,6 +1322,7 @@
       updateBlackHoles(dt);
       updateSlowZones(dt);
       updateHomingMissiles(dt);
+      updatePacMans(dt); // Atualiza física do Pac-Man Caçador
       updateKamehamehas(dt);
       updateProjectiles(dt); 
       updateBossClones(dt); 
@@ -1228,6 +1334,7 @@
       drawBlackHoles();
       drawSlowZones();
       drawHomingMissiles();
+      drawPacMans();     // Renderiza o Pac-Man Caçador
       drawKamehamehas();
       drawParticles(); 
       drawEnemies(); 
