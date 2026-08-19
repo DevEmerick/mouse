@@ -536,16 +536,16 @@
       spawnParticles(x, y, '#ffb547', 10, 1.5, 100);
     }
 
-    // KAMEHAMEHA GRADUAL E ÚNICO (Garante apenas uma instância limpa por disparo)
+    // KAMEHAMEHA: Limpeza leve (apenas 20%) para manter o desafio alto
     function spawnKamehameha() {
-      if (kamehamehas.length > 0) return; // Evita duplicações indesejadas
+      if (kamehamehas.length > 0) return; 
 
-      if (projectiles.length > 4) projectiles.splice(0, Math.floor(projectiles.length / 2));
-      if (enemies.length > 3) enemies.splice(0, Math.floor(enemies.length / 2));
+      if (projectiles.length > 2) projectiles.splice(0, 1);
+      if (enemies.length > 2) enemies.splice(0, 1);
 
       kamehamehas.push({
-        warningTimer: 1.8, // 1.8s de aviso prévio com leque de mira suave
-        activeTimer: 1.2,  // 1.2s de varredura lenta e gradual cortando a tela
+        warningTimer: 1.8, 
+        activeTimer: 1.2,  
         angle: 0,
         targetAngle: 0
       });
@@ -569,11 +569,12 @@
       let nextX = clamp(event.clientX - rect.left, 0, world.width);
       let nextY = clamp(event.clientY - rect.top, 0, world.height);
 
+      // SLOW AUMENTADO EM 60%: Reduz a velocidade em 60% (mantém apenas 40% do movimento) dentro da área
       for (const sz of slowZones) {
         if (nextX >= sz.x - sz.width/2 && nextX <= sz.x + sz.width/2 &&
             nextY >= sz.y - sz.height/2 && nextY <= sz.y + sz.height/2) {
-          nextX = mouse.x + (nextX - mouse.x) * 0.85;
-          nextY = mouse.y + (nextY - mouse.y) * 0.85;
+          nextX = mouse.x + (nextX - mouse.x) * 0.4;
+          nextY = mouse.y + (nextY - mouse.y) * 0.4;
         }
       }
 
@@ -778,8 +779,7 @@
             bot.color = '#66e3ff';
             spawnKamehameha();
           }
-          // Duração estendida para suportar a varredura lenta e gradual
-          if (botStateTimer > 3.0) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
+          if (botStateTimer > 3.2) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
       }
       bot.x = clamp(bot.x, 18, world.width - 18); bot.y = clamp(bot.y, 18, world.height - 18);
@@ -823,25 +823,24 @@
       }
     }
 
-    // KAMEHAMEHA GRADUAL E LENTO: O feixe gira devagar na tela
+    // KAMEHAMEHA GRADUAL E LENTO: Com rotação suave e controlada
     function updateKamehamehas(dt) {
       for (let i = kamehamehas.length - 1; i >= 0; i--) {
         const kh = kamehamehas[i];
         
         if (kh.warningTimer > 0) {
           kh.warningTimer -= dt;
-          // Trava a mira suavemente indicando o alvo
           const targetAngle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
           kh.angle += (targetAngle - kh.angle) * (dt * 3); 
-          kh.targetAngle = kh.angle; // Guarda o ângulo exato do disparo
+          kh.targetAngle = kh.angle; 
           continue;
         }
 
         kh.activeTimer -= dt;
 
-        // Varredura gradual e lenta (o feixe agora gira devagar enquanto está ativo)
-        kh.targetAngle += dt * 0.4; 
-        kh.angle += (kh.targetAngle - kh.angle) * (dt * 2);
+        // Varredura gradual e lenta
+        kh.targetAngle += dt * 0.3; 
+        kh.angle += (kh.targetAngle - kh.angle) * (dt * 1.5);
 
         const toMouseX = mouse.x - bot.x;
         const toMouseY = mouse.y - bot.y;
