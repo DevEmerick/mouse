@@ -536,15 +536,18 @@
       spawnParticles(x, y, '#ffb547', 10, 1.5, 100);
     }
 
-    // KAMEHAMEHA COM AIMBOT JUSTO: Trava a mira prematuramente e dá margem de escape
+    // KAMEHAMEHA GRADUAL E ÚNICO (Garante apenas uma instância limpa por disparo)
     function spawnKamehameha() {
+      if (kamehamehas.length > 0) return; // Evita duplicações indesejadas
+
       if (projectiles.length > 4) projectiles.splice(0, Math.floor(projectiles.length / 2));
       if (enemies.length > 3) enemies.splice(0, Math.floor(enemies.length / 2));
 
       kamehamehas.push({
-        warningTimer: 1.6, // 1.6s de aviso para o jogador escapar da linha de tiro
-        activeTimer: 0.8,  
-        angle: 0
+        warningTimer: 1.8, // 1.8s de aviso prévio com leque de mira suave
+        activeTimer: 1.2,  // 1.2s de varredura lenta e gradual cortando a tela
+        angle: 0,
+        targetAngle: 0
       });
       spawnParticles(bot.x, bot.y, '#66e3ff', 30, 3.0, 250);
     }
@@ -775,7 +778,8 @@
             bot.color = '#66e3ff';
             spawnKamehameha();
           }
-          if (botStateTimer > 2.4) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
+          // Duração estendida para suportar a varredura lenta e gradual
+          if (botStateTimer > 3.0) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
       }
       bot.x = clamp(bot.x, 18, world.width - 18); bot.y = clamp(bot.y, 18, world.height - 18);
@@ -819,20 +823,25 @@
       }
     }
 
-    // AIMBOT JUSTO: A mira trava antes de disparar e tem tolerância de desvio humana
+    // KAMEHAMEHA GRADUAL E LENTO: O feixe gira devagar na tela
     function updateKamehamehas(dt) {
       for (let i = kamehamehas.length - 1; i >= 0; i--) {
         const kh = kamehamehas[i];
         
         if (kh.warningTimer > 0) {
           kh.warningTimer -= dt;
-          // Trava a mira suavemente com um leve atraso (simulando tempo de reação humano)
+          // Trava a mira suavemente indicando o alvo
           const targetAngle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
-          kh.angle += (targetAngle - kh.angle) * (dt * 4); 
+          kh.angle += (targetAngle - kh.angle) * (dt * 3); 
+          kh.targetAngle = kh.angle; // Guarda o ângulo exato do disparo
           continue;
         }
 
         kh.activeTimer -= dt;
+
+        // Varredura gradual e lenta (o feixe agora gira devagar enquanto está ativo)
+        kh.targetAngle += dt * 0.4; 
+        kh.angle += (kh.targetAngle - kh.angle) * (dt * 2);
 
         const toMouseX = mouse.x - bot.x;
         const toMouseY = mouse.y - bot.y;
@@ -843,7 +852,6 @@
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         angleDiff = Math.abs(angleDiff);
 
-        // Tolerância de ângulo ajustada para dar chance real de esquiva lateral
         if (angleDiff < 0.18 && mouseDist < Math.max(world.width, world.height)) {
           spawnParticles(mouse.x, mouse.y, '#66e3ff', 25, 2.5, 250);
           endGame('Você foi atingido pelo Kamehameha');
@@ -992,7 +1000,7 @@
           ctx.lineWidth = 2;
           ctx.setLineDash([6, 6]);
           
-          const spreadAngle = 0.18; // Feixe de mira bem focado
+          const spreadAngle = 0.18; 
           ctx.beginPath();
           ctx.moveTo(bot.x, bot.y);
           ctx.lineTo(bot.x + Math.cos(kh.angle - spreadAngle) * maxDist, bot.y + Math.sin(kh.angle - spreadAngle) * maxDist);
@@ -1300,7 +1308,7 @@
       const novoNome = playerNameInput.value.trim();
       if (!novoNome) {
         submitMsg.textContent = "Por favor, digite um apelido válido.";
-        submitMsg.style.color = "var(--warning)";
+        submitMsg.style.color = 'var(--warning)';
         return;
       }
 
