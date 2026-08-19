@@ -380,7 +380,7 @@
     let bossClones = [];
     let blackHoles = [];    
     let slowZones = [];     
-    let kamehamehas = [];   // Habilidade Suprema: O Feixe Kamehameha
+    let kamehamehas = [];   // Kamehameha balanceado
     let spawnTimer = 0;
     let botAttackTimer = 0;
     let botState = 'CHASE';
@@ -536,15 +536,14 @@
       spawnParticles(x, y, '#ffb547', 10, 1.5, 100);
     }
 
-    // Fábrica do Kamehameha (Limpa a tela e dispara o feixe cônico cortando tudo)
+    // KAMEHAMEHA BALANCEADO: 1.6s de aviso prévio (leque estreito) e limpeza tática leve
     function spawnKamehameha() {
-      // Limpagem tática: Reduz projéteis e inimigos excessivos para um nível perfeitamente jogável
       if (projectiles.length > 4) projectiles.splice(0, Math.floor(projectiles.length / 2));
       if (enemies.length > 3) enemies.splice(0, Math.floor(enemies.length / 2));
 
       kamehamehas.push({
-        warningTimer: 1.2, // 1.2s de linha pontilhada em cone para o jogador desviar
-        activeTimer: 0.8,  // 0.8s de laser ativo cortando a tela
+        warningTimer: 1.6, // Tempo aumentado para dar tempo de desviar confortavelmente
+        activeTimer: 0.8,  
         angle: 0
       });
       spawnParticles(bot.x, bot.y, '#66e3ff', 30, 3.0, 250);
@@ -634,7 +633,6 @@
       }
     }
 
-    // Incluindo KAMEHAMEHA no sorteio de habilidades do chefe
     function chooseBossPattern() {
       const options = ['DASH', 'SHOOT', 'TELEPORT', 'HOMING', 'PURSUE', 'CLONE', 'SWEEP', 'SUMMON', 'RING', 'BERSERK', 'BLACKHOLE', 'SLOWZONE', 'KAMEHAMEHA'];
       const filtered = options.filter(p => p !== botState);
@@ -772,13 +770,13 @@
           }
           if (botStateTimer > 0.6) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
-        // Execução do Kamehameha
         case 'KAMEHAMEHA':
           if (botStateTimer < 0.12) {
             bot.color = '#66e3ff';
             spawnKamehameha();
           }
-          if (botStateTimer > 2.0) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
+          // Tempo de duração total da habilidade ajustado para casar com o aviso maior
+          if (botStateTimer > 2.4) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
       }
       bot.x = clamp(bot.x, 18, world.width - 18); bot.y = clamp(bot.y, 18, world.height - 18);
@@ -822,34 +820,29 @@
       }
     }
 
-    // Física e colisão do Kamehameha
     function updateKamehamehas(dt) {
       for (let i = kamehamehas.length - 1; i >= 0; i--) {
         const kh = kamehamehas[i];
         
         if (kh.warningTimer > 0) {
           kh.warningTimer -= dt;
-          // Trava a mira do cone direto no mouse durante a fase de carga
           kh.angle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
           continue;
         }
 
         kh.activeTimer -= dt;
 
-        // Teste de colisão: Verifica se o mouse está dentro da faixa do feixe laser disparado
-        const laserWidth = 60; // Largura do feixe
         const toMouseX = mouse.x - bot.x;
         const toMouseY = mouse.y - bot.y;
         const mouseDist = Math.hypot(toMouseX, toMouseY);
         const mouseAngle = Math.atan2(toMouseY, toMouseX);
         
-        // Diferença angular entre o feixe e a posição do mouse
         let angleDiff = Math.abs(mouseAngle - kh.angle);
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         angleDiff = Math.abs(angleDiff);
 
-        // Se o mouse estiver na direção do feixe laser ativo
-        if (angleDiff < 0.35 && mouseDist < Math.max(world.width, world.height)) {
+        // Faixa de colisão estreita e justa
+        if (angleDiff < 0.25 && mouseDist < Math.max(world.width, world.height)) {
           spawnParticles(mouse.x, mouse.y, '#66e3ff', 25, 2.5, 250);
           endGame('Você foi atingido pelo Kamehameha');
           return;
@@ -987,19 +980,18 @@
       }
     }
 
-    // Renderização Visual do Kamehameha (Cone pontilhado de mira + Feixe de energia cósmica)
+    // Leque de mira mais estreito e limpo
     function drawKamehamehas() {
       for (const kh of kamehamehas) {
         ctx.save();
         const maxDist = Math.max(world.width, world.height) * 1.5;
 
         if (kh.warningTimer > 0) {
-          // Fase 1: Linha pontilhada em formato de cone (leque de mira)
-          ctx.strokeStyle = 'rgba(102, 227, 255, 0.7)';
+          ctx.strokeStyle = 'rgba(102, 227, 255, 0.8)';
           ctx.lineWidth = 2;
-          ctx.setLineDash([8, 8]);
+          ctx.setLineDash([6, 6]);
           
-          const spreadAngle = 0.35;
+          const spreadAngle = 0.22; // Leque mais fechado e justo
           ctx.beginPath();
           ctx.moveTo(bot.x, bot.y);
           ctx.lineTo(bot.x + Math.cos(kh.angle - spreadAngle) * maxDist, bot.y + Math.sin(kh.angle - spreadAngle) * maxDist);
@@ -1007,27 +999,23 @@
           ctx.lineTo(bot.x + Math.cos(kh.angle + spreadAngle) * maxDist, bot.y + Math.sin(kh.angle + spreadAngle) * maxDist);
           ctx.stroke();
 
-          // Arco central pontilhado
           ctx.beginPath();
           ctx.moveTo(bot.x, bot.y);
           ctx.lineTo(bot.x + Math.cos(kh.angle) * maxDist, bot.y + Math.sin(kh.angle) * maxDist);
           ctx.stroke();
         } else {
-          // Fase 2: O Feixe Kamehameha disparado cortando a tela toda
           ctx.shadowBlur = 35;
           ctx.shadowColor = '#66e3ff';
           
-          // Núcleo branco brilhante do laser
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 20;
+          ctx.lineWidth = 16;
           ctx.beginPath();
           ctx.moveTo(bot.x, bot.y);
           ctx.lineTo(bot.x + Math.cos(kh.angle) * maxDist, bot.y + Math.sin(kh.angle) * maxDist);
           ctx.stroke();
 
-          // Aura externa azul neon cósmica
           ctx.strokeStyle = 'rgba(102, 227, 255, 0.6)';
-          ctx.lineWidth = 50;
+          ctx.lineWidth = 40;
           ctx.beginPath();
           ctx.moveTo(bot.x, bot.y);
           ctx.lineTo(bot.x + Math.cos(kh.angle) * maxDist, bot.y + Math.sin(kh.angle) * maxDist);
@@ -1123,7 +1111,7 @@
       updateBot(dt); 
       updateBlackHoles(dt);
       updateSlowZones(dt);
-      updateKamehamehas(dt); // Atualiza física e mira do Kamehameha
+      updateKamehamehas(dt);
       updateProjectiles(dt); 
       updateBossClones(dt); 
       updateEnemies(dt); 
@@ -1133,7 +1121,7 @@
       drawBackground(); 
       drawBlackHoles();
       drawSlowZones();
-      drawKamehamehas(); // Renderiza o Kamehameha
+      drawKamehamehas();
       drawParticles(); 
       drawEnemies(); 
       drawBossClones(); 
