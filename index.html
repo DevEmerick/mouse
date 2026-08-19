@@ -416,7 +416,8 @@
     }
 
     function resetGame() {
-      bot = { x: 120, y: 120, radius: 18, baseSpeed: 170, color: '#ff5f6d', eyeAngle: 0 };
+      // attackDelay inserido para que a velocidade do ataque varie imprevisivelmente
+      bot = { x: 120, y: 120, radius: 18, baseSpeed: 170, color: '#ff5f6d', eyeAngle: 0, attackDelay: 2.0 };
       projectiles = []; particles = []; enemies = []; bossClones = [];
       spawnTimer = 0; botAttackTimer = 0; botState = 'CHASE'; botStateTimer = 0;
       dashVector = { x: 0, y: 0 }; teleportTarget = null; bot.alpha = 1;
@@ -585,14 +586,14 @@
         projectiles.push({ x: originX, y: originY, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, radius: rand(3, 5), color });
       }
     }
+
+    // ALEATÓRIO DE VERDADE: Todas as opções disponíveis desde o início e sem barreiras de tempo
     function chooseBossPattern() {
-      const options = ['DASH', 'SHOOT'];
-      if (state.time > 8) options.push('TELEPORT'); if (state.time > 14) options.push('HOMING'); if (state.time > 20) options.push('PURSUE');
-      if (state.time > 22) options.push('CLONE'); if (state.time > 28) options.push('SWEEP'); if (state.time > 34) options.push('SUMMON');
-      if (state.time > 42) options.push('RING'); if (state.time > 50) options.push('BERSERK');
+      const options = ['DASH', 'SHOOT', 'TELEPORT', 'HOMING', 'PURSUE', 'CLONE', 'SWEEP', 'SUMMON', 'RING', 'BERSERK'];
       const filtered = options.filter(p => p !== botState);
       return (filtered.length ? filtered : options)[Math.floor(Math.random() * (filtered.length || options.length))];
     }
+
     function summonMinions(amount) {
       for (let i = 0; i < amount; i++) {
         const angle = (Math.PI * 2 * i) / amount + Math.random() * 0.45;
@@ -617,16 +618,21 @@
           const agility = 1 + Math.min(1.2, phase / 25);
           bot.x += chaseDirX * bot.baseSpeed * agility * dt; bot.y += chaseDirY * bot.baseSpeed * agility * dt;
           
-          // ANTI-TRAPAÇA: Se o player ficar perto, o chefe dispara padrões agressivos aleatórios
           if (distance < 160 && botAttackTimer > 0.7) { 
             botAttackTimer = 0; botStateTimer = 0; 
             botState = chooseBossPattern(); 
             dashVector = { x: chaseDirX, y: chaseDirY }; 
             spawnParticles(bot.x, bot.y, '#ffb547', 14, 2.0, 160); 
             teleportTarget = null; 
+            bot.attackDelay = rand(1.2, 2.5); // Rola um novo tempo pro próximo ataque
           }
-          else if (botAttackTimer > Math.max(1.2, 2.2 - phase * 0.02)) { 
-            botAttackTimer = 0; botStateTimer = 0; botState = chooseBossPattern(); dashVector = { x: chaseDirX, y: chaseDirY }; spawnParticles(bot.x, bot.y, '#e8eefc', 18, 2.2, 170); teleportTarget = null; 
+          else if (botAttackTimer > bot.attackDelay) { 
+            botAttackTimer = 0; botStateTimer = 0; 
+            botState = chooseBossPattern(); 
+            dashVector = { x: chaseDirX, y: chaseDirY }; 
+            spawnParticles(bot.x, bot.y, '#e8eefc', 18, 2.2, 170); 
+            teleportTarget = null; 
+            bot.attackDelay = rand(1.2, 2.5); // Rola um novo tempo pro próximo ataque (aleatório, sem ligação com a 'fase')
           }
           break;
         case 'DASH':
@@ -639,7 +645,6 @@
           if (botStateTimer < 0.08) bot.color = '#ffb547';
           bot.x += ((aim.x - bot.x) / pLen) * (bot.baseSpeed * 2.2) * dt; bot.y += ((aim.y - bot.y) / pLen) * (bot.baseSpeed * 2.2) * dt;
           
-          // ANTI-TRAPAÇA 2: Garante um disparo no meio do dash pra não ser driblado
           if (botStateTimer > 0.12 && botStateTimer - dt <= 0.12) {
             spawnParticles(bot.x, bot.y, '#ffb547', 12, 1.5, 120);
             spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 3, 400 + phase * 2, '#ffb547');
@@ -648,9 +653,9 @@
           if (botStateTimer > 0.26) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'SHOOT':
-          if (botStateTimer > 0.12 && botStateTimer < 0.18) { bot.color = '#ffb547'; spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 4, 410, '#ffb547'); }
-          if (botStateTimer > 0.33 && botStateTimer < 0.39) spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 260 + phase * 1.4, '#66e3ff');
-          if (botStateTimer > 0.54 && botStateTimer < 0.60) { spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 4, 500, '#ff5f6d'); bot.color = '#ff5f6d'; }
+          if (botStateTimer > 0.12 && botStateTimer - dt <= 0.12) { bot.color = '#ffb547'; spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 4, 410, '#ffb547'); }
+          if (botStateTimer > 0.33 && botStateTimer - dt <= 0.33) spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 260 + phase * 1.4, '#66e3ff');
+          if (botStateTimer > 0.54 && botStateTimer - dt <= 0.54) { spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 4, 500, '#ff5f6d'); bot.color = '#ff5f6d'; }
           if (botStateTimer > 0.86) { botState = 'CHASE'; botStateTimer = 0; bot.color = '#ff5f6d'; }
           break;
         case 'TELEPORT':
@@ -661,8 +666,8 @@
           break;
         case 'HOMING':
           if (botStateTimer < 0.12) bot.color = '#66e3ff';
-          if (botStateTimer > 0.08 && botStateTimer < 0.16) spawnHomingProjectile(bot.x, bot.y, mouse.x, mouse.y, 220 + phase * 2.2, '#66e3ff');
-          if (botStateTimer > 0.28 && botStateTimer < 0.34) spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 300 + phase * 1.6, '#ff5f6d');
+          if (botStateTimer > 0.08 && botStateTimer - dt <= 0.08) spawnHomingProjectile(bot.x, bot.y, mouse.x, mouse.y, 220 + phase * 2.2, '#66e3ff');
+          if (botStateTimer > 0.28 && botStateTimer - dt <= 0.28) spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 300 + phase * 1.6, '#ff5f6d');
           if (botStateTimer > 0.92) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'CLONE':
@@ -674,34 +679,38 @@
               spawnBossClone(clamp(mouse.x + Math.cos(ang) * dist, 28, world.width - 28), clamp(mouse.y + Math.sin(ang) * dist, 28, world.height - 28), phase, 2.2 + i * 0.25);
             }
           }
-          if (botStateTimer > 0.28 && botStateTimer < 0.34) { spawnBossRingShot(bot.x, bot.y, 8, 320 + phase * 3, '#66e3ff'); spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 280 + phase * 1.8, '#f0f4ff'); }
+          if (botStateTimer > 0.28 && botStateTimer - dt <= 0.28) { spawnBossRingShot(bot.x, bot.y, 8, 320 + phase * 3, '#66e3ff'); spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 280 + phase * 1.8, '#f0f4ff'); }
           if (botStateTimer > 0.78) { bot.color = '#ff5f6d'; bot.alpha = 1; botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'SWEEP':
           const targetY = clamp(mouse.y + (Math.sin(botStateTimer * 5) > 0 ? 1 : -1) * 130, 24, world.height - 24);
           const targetX = clamp(mouse.x + Math.cos(botStateTimer * 3) * 150, 24, world.width - 24);
           bot.x += clamp(targetX - bot.x, -1, 1) * (bot.baseSpeed * 1.7) * dt; bot.y += clamp(targetY - bot.y, -1, 1) * (bot.baseSpeed * 1.7) * dt;
-          if (Math.floor(botStateTimer * 10) % 3 === 0) spawnBossSweep(bot.x, bot.y, Math.atan2(mouse.y - bot.y, mouse.x - bot.x), 1.1, 4, 360 + phase * 3, '#47e6a3');
+          
+          if (Math.floor(botStateTimer * 10) > Math.floor((botStateTimer - dt) * 10) && Math.floor(botStateTimer * 10) % 3 === 0) {
+            spawnBossSweep(bot.x, bot.y, Math.atan2(mouse.y - bot.y, mouse.x - bot.x), 1.1, 4, 360 + phase * 3, '#47e6a3');
+          }
+
           if (botStateTimer > 1.1) { botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'SUMMON':
           if (botStateTimer < 0.14) bot.color = '#47e6a3';
-          if (botStateTimer > 0.18 && botStateTimer < 0.28) summonMinions(2 + Math.min(3, Math.floor(phase / 10)));
-          if (botStateTimer > 0.32 && botStateTimer < 0.36) spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 5, 440, '#47e6a3');
+          if (botStateTimer > 0.18 && botStateTimer - dt <= 0.18) summonMinions(2 + Math.min(3, Math.floor(phase / 10)));
+          if (botStateTimer > 0.32 && botStateTimer - dt <= 0.32) spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 5, 440, '#47e6a3');
           if (botStateTimer > 0.92) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'RING':
           if (botStateTimer < 0.12) bot.color = '#66e3ff';
-          if (botStateTimer > 0.18 && botStateTimer < 0.22) spawnBossRingShot(bot.x, bot.y, 10 + Math.min(6, Math.floor(phase / 8)), 290 + phase * 5, '#66e3ff');
-          if (botStateTimer > 0.46 && botStateTimer < 0.50) spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 6, 500, '#ffb547');
+          if (botStateTimer > 0.18 && botStateTimer - dt <= 0.18) spawnBossRingShot(bot.x, bot.y, 10 + Math.min(6, Math.floor(phase / 8)), 290 + phase * 5, '#66e3ff');
+          if (botStateTimer > 0.46 && botStateTimer - dt <= 0.46) spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 6, 500, '#ffb547');
           if (botStateTimer > 0.82) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'BERSERK':
           const pulseSpeed = 1.9 + Math.sin(botStateTimer * 8) * 0.4;
           bot.x += dirX * bot.baseSpeed * pulseSpeed * dt; bot.y += dirY * bot.baseSpeed * pulseSpeed * dt;
-          if (botStateTimer > 0.10 && botStateTimer < 0.14) spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 5, 520, '#ff5f6d');
-          if (botStateTimer > 0.26 && botStateTimer < 0.30) spawnBossRingShot(bot.x, bot.y, 12, 310 + phase * 4, '#f0f4ff');
-          if (botStateTimer > 0.44 && botStateTimer < 0.48) spawnBossSweep(bot.x, bot.y, Math.atan2(mouse.y - bot.y, mouse.x - bot.x), 1.6, 7, 480, '#ffb547');
+          if (botStateTimer > 0.10 && botStateTimer - dt <= 0.10) spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 5, 520, '#ff5f6d');
+          if (botStateTimer > 0.26 && botStateTimer - dt <= 0.26) spawnBossRingShot(bot.x, bot.y, 12, 310 + phase * 4, '#f0f4ff');
+          if (botStateTimer > 0.44 && botStateTimer - dt <= 0.44) spawnBossSweep(bot.x, bot.y, Math.atan2(mouse.y - bot.y, mouse.x - bot.x), 1.6, 7, 480, '#ffb547');
           if (botStateTimer > 0.78) { botState = 'CHASE'; botStateTimer = 0; }
           break;
       }
@@ -889,7 +898,6 @@
     window.addEventListener('blur', () => { if (state.running) showToast('Volte para a janela para continuar fugindo.'); });
 
     startBtn.addEventListener('click', startGame); demoBtn.addEventListener('click', () => { showToast('Toque/arraste, fique em movimento e tente prever os dashes.'); });
-
 
     function generateToken() {
       return Math.random().toString(36).substring(2) + Date.now().toString(36);
