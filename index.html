@@ -381,6 +381,7 @@
     let blackHoles = [];    
     let slowZones = [];     
     let kamehamehas = [];   
+    let homingMissiles = []; // Novo Foguete Teleguiado de 3 segundos
     let spawnTimer = 0;
     let botAttackTimer = 0;
     let botState = 'CHASE';
@@ -420,7 +421,7 @@
 
     function resetGame() {
       bot = { x: 120, y: 120, radius: 18, baseSpeed: 170, color: '#ff5f6d', eyeAngle: 0, attackDelay: 2.0 };
-      projectiles = []; particles = []; enemies = []; bossClones = []; blackHoles = []; slowZones = []; kamehamehas = [];
+      projectiles = []; particles = []; enemies = []; bossClones = []; blackHoles = []; slowZones = []; kamehamehas = []; homingMissiles = [];
       spawnTimer = 0; botAttackTimer = 0; botState = 'CHASE'; botStateTimer = 0;
       dashVector = { x: 0, y: 0 }; teleportTarget = null; bot.alpha = 1;
       state.shake = 0; state.flash = 0; titleFlashTimer = 0; state.ended = false;
@@ -536,18 +537,36 @@
       spawnParticles(x, y, '#ffb547', 10, 1.5, 100);
     }
 
-    // KAMEHAMEHA: Limpeza leve (apenas 20%) para manter o desafio alto
+    // Foguete Teleguiado: Dura exatamente 3 segundos perseguindo o mouse
+    function spawnHomingMissile() {
+      const angle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
+      homingMissiles.push({
+        x: bot.x,
+        y: bot.y,
+        vx: Math.cos(angle) * 240,
+        vy: Math.sin(angle) * 240,
+        radius: 6,
+        life: 3.0, // Dura aproximadamente 3 segundos
+        turnRate: 3.2,
+        color: '#ff5f6d'
+      });
+      spawnParticles(bot.x, bot.y, '#ff5f6d', 15, 2.0, 180);
+    }
+
+    // Kamehameha Corrigido: Trava o ângulo exato do mouse no momento do disparo
     function spawnKamehameha() {
       if (kamehamehas.length > 0) return; 
 
       if (projectiles.length > 2) projectiles.splice(0, 1);
       if (enemies.length > 2) enemies.splice(0, 1);
 
+      const fixedAimAngle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
+
       kamehamehas.push({
         warningTimer: 1.8, 
         activeTimer: 1.2,  
-        angle: 0,
-        targetAngle: 0
+        angle: fixedAimAngle,
+        targetAngle: fixedAimAngle
       });
       spawnParticles(bot.x, bot.y, '#66e3ff', 30, 3.0, 250);
     }
@@ -569,7 +588,6 @@
       let nextX = clamp(event.clientX - rect.left, 0, world.width);
       let nextY = clamp(event.clientY - rect.top, 0, world.height);
 
-      // SLOW AUMENTADO EM 60%: Reduz a velocidade em 60% (mantém apenas 40% do movimento) dentro da área
       for (const sz of slowZones) {
         if (nextX >= sz.x - sz.width/2 && nextX <= sz.x + sz.width/2 &&
             nextY >= sz.y - sz.height/2 && nextY <= sz.y + sz.height/2) {
@@ -637,8 +655,9 @@
       }
     }
 
+    // Incluindo HOMINGMISSILE no sorteio do chefe
     function chooseBossPattern() {
-      const options = ['DASH', 'SHOOT', 'TELEPORT', 'HOMING', 'PURSUE', 'CLONE', 'SWEEP', 'SUMMON', 'RING', 'BERSERK', 'BLACKHOLE', 'SLOWZONE', 'KAMEHAMEHA'];
+      const options = ['DASH', 'SHOOT', 'TELEPORT', 'HOMING', 'PURSUE', 'CLONE', 'SWEEP', 'SUMMON', 'RING', 'BERSERK', 'BLACKHOLE', 'SLOWZONE', 'KAMEHAMEHA', 'HOMINGMISSILE'];
       const filtered = options.filter(p => p !== botState);
       return (filtered.length ? filtered : options)[Math.floor(Math.random() * (filtered.length || options.length))];
     }
@@ -781,6 +800,13 @@
           }
           if (botStateTimer > 3.2) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
+        case 'HOMINGMISSILE':
+          if (botStateTimer < 0.12) {
+            bot.color = '#ff5f6d';
+            spawnHomingMissile();
+          }
+          if (botStateTimer > 0.6) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
+          break;
       }
       bot.x = clamp(bot.x, 18, world.width - 18); bot.y = clamp(bot.y, 18, world.height - 18);
     }
@@ -823,24 +849,55 @@
       }
     }
 
-    // KAMEHAMEHA GRADUAL E LENTO: Com rotação suave e controlada
+    // Foguete Teleguiado: Persegue o mouse por 3 segundos
+    function updateHomingMissiles(dt) {
+      for (let i = homingMissiles.length - 1; i >= 0; i--) {
+        const hm = homingMissiles[i];
+        hm.life -= dt;
+
+        const dx = mouse.x - hm.x;
+        const dy = mouse.y - hm.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const speed = Math.hypot(hm.vx, hm.vy);
+
+        // Curva suave em direção ao mouse
+        hm.vx += ((dx / dist) * speed - hm.vx) * hm.turnRate * dt;
+        hm.vy += ((dy / dist) * speed - hm.vy) * hm.turnRate * dt;
+
+        hm.x += hm.vx * dt;
+        hm.y += hm.vy * dt;
+
+        if (Math.hypot(mouse.x - hm.x, mouse.y - hm.y) < hm.radius + mouse.radius) {
+          spawnParticles(mouse.x, mouse.y, hm.color, 20, 2.2, 220);
+          endGame('Você foi atingido pelo Foguete Teleguiado');
+          return;
+        }
+
+        if (hm.life <= 0) {
+          spawnParticles(hm.x, hm.y, hm.color, 10, 1.2, 100);
+          homingMissiles.splice(i, 1);
+        }
+      }
+    }
+
     function updateKamehamehas(dt) {
       for (let i = kamehamehas.length - 1; i >= 0; i--) {
         const kh = kamehamehas[i];
         
         if (kh.warningTimer > 0) {
           kh.warningTimer -= dt;
+          // Mira suave e fixa o alvo no final do aviso
           const targetAngle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
-          kh.angle += (targetAngle - kh.angle) * (dt * 3); 
+          kh.angle += (targetAngle - kh.angle) * (dt * 2.5); 
           kh.targetAngle = kh.angle; 
           continue;
         }
 
         kh.activeTimer -= dt;
 
-        // Varredura gradual e lenta
-        kh.targetAngle += dt * 0.3; 
-        kh.angle += (kh.targetAngle - kh.angle) * (dt * 1.5);
+        // Varredura muito lenta e gradual
+        kh.targetAngle += dt * 0.2; 
+        kh.angle += (kh.targetAngle - kh.angle) * (dt * 1.2);
 
         const toMouseX = mouse.x - bot.x;
         const toMouseY = mouse.y - bot.y;
@@ -989,6 +1046,19 @@
       }
     }
 
+    function drawHomingMissiles() {
+      for (const hm of homingMissiles) {
+        ctx.save();
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = hm.color;
+        ctx.beginPath();
+        ctx.arc(hm.x, hm.y, hm.radius, 0, Math.PI * 2);
+        ctx.fillStyle = hm.color;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
     function drawKamehamehas() {
       for (const kh of kamehamehas) {
         ctx.save();
@@ -1119,6 +1189,7 @@
       updateBot(dt); 
       updateBlackHoles(dt);
       updateSlowZones(dt);
+      updateHomingMissiles(dt); // Atualiza os foguetes teleguiados
       updateKamehamehas(dt);
       updateProjectiles(dt); 
       updateBossClones(dt); 
@@ -1129,6 +1200,7 @@
       drawBackground(); 
       drawBlackHoles();
       drawSlowZones();
+      drawHomingMissiles(); // Renderiza os foguetes teleguiados
       drawKamehamehas();
       drawParticles(); 
       drawEnemies(); 
