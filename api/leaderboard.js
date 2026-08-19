@@ -16,6 +16,32 @@ function normalizeLeaderboard(record) {
   return Array.isArray(record) ? record : [];
 }
 
+async function fetchLatestLeaderboard(binUrl, apiKey) {
+  const response = await fetch(`${binUrl}/latest`, {
+    headers: { 'X-Master-Key': apiKey }
+  });
+
+  if (response.ok) {
+    const data = await response.json();
+    return {
+      record: normalizeLeaderboard(data.record),
+      missing: false
+    };
+  }
+
+  if (response.status === 404 || response.status === 204) {
+    return {
+      record: [],
+      missing: true
+    };
+  }
+
+  const errorText = await response.text().catch(() => '');
+  const error = new Error(errorText || 'Não foi possível acessar o placar atual.');
+  error.status = response.status;
+  throw error;
+}
+
 export default async function handler(req, res) {
   const apiKey = process.env.JSONBIN_API_KEY;
   const binId = process.env.JSONBIN_BIN_ID;
@@ -28,19 +54,14 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
-      const response = await fetch(`${binUrl}/latest`, {
-        headers: { 'X-Master-Key': apiKey }
-      });
-
-      if (!response.ok) {
-        return sendJson(res, response.status, { error: 'Não foi possível carregar o placar.' });
-      }
-
-      const data = await response.json();
-      const record = normalizeLeaderboard(data.record);
+      const { record } = await fetchLatestLeaderboard(binUrl, apiKey);
       return sendJson(res, 200, { record });
     } catch (error) {
-      return sendJson(res, 500, { error: 'Erro ao buscar o placar.' });
+      const status = error.status && error.status >= 400 ? error.status : 500;
+      const message = status === 401 || status === 403
+        ? 'Acesso ao JSONBin negado. Verifique JSONBIN_API_KEY e JSONBIN_BIN_ID no ambiente da Vercel.'
+        : 'Erro ao buscar o placar.';
+      return sendJson(res, status, { error: message });
     }
   }
 
@@ -62,16 +83,8 @@ export default async function handler(req, res) {
     }
 
     try {
-      const response = await fetch(`${binUrl}/latest`, {
-        headers: { 'X-Master-Key': apiKey }
-      });
-
-      if (!response.ok) {
-        return sendJson(res, response.status, { error: 'Não foi possível ler o placar atual.' });
-      }
-
-      const data = await response.json();
-      const placar = normalizeLeaderboard(data.record);
+      const latest = await fetchLatestLeaderboard(binUrl, apiKey);
+      const placar = latest.record;
       const jogadorIndex = placar.findIndex((p) => p && p.nome === nome);
       let updated = false;
       let syncedTime = tempo;
@@ -116,7 +129,10 @@ export default async function handler(req, res) {
         });
 
         if (!putResponse.ok) {
-          return sendJson(res, 500, { error: 'Falha ao atualizar o placar.' });
+          const errorText = await putResponse.text().catch(() => '');
+          return sendJson(res, 500, {
+            error: errorText || 'Falha ao atualizar o placar.'
+          });
         }
       }
 
