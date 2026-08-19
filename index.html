@@ -352,6 +352,8 @@
     const syncedScoreKey = 'mouse-avoid-synced-time';
     const leaderboardCacheKey = 'mouse-avoid-leaderboard-cache'; 
     const bestScoreKey = 'mouse-avoid-best-time';
+    const leaderboardEndpoint = '/api/leaderboard';
+    const leaderboardApiAvailable = location.protocol !== 'file:';
 
     let bestTime = Number(localStorage.getItem(bestScoreKey) || 0);
     let syncedTime = Number(localStorage.getItem(syncedScoreKey) || 0); 
@@ -911,15 +913,29 @@
           renderLeaderboard(JSON.parse(cache));
         } catch(e) {}
       } else {
-        fetchLeaderboard(false);
+        leaderboardList.innerHTML = '<li style="color: var(--muted);">Nenhum recorde ainda.</li>';
       }
     }
 
     async function fetchLeaderboard(forceRender = false) {
       if (forceRender) leaderboardList.innerHTML = '<li style="color: var(--muted);">Sincronizando placar...</li>';
+
+      if (!leaderboardApiAvailable) {
+        const cache = localStorage.getItem(leaderboardCacheKey);
+        if (cache) {
+          try {
+            renderLeaderboard(JSON.parse(cache));
+          } catch (error) {
+            leaderboardList.innerHTML = '<li style="color: var(--muted);">Nenhum recorde ainda.</li>';
+          }
+        } else {
+          leaderboardList.innerHTML = '<li style="color: var(--muted);">Nenhum recorde ainda.</li>';
+        }
+        return;
+      }
       
       try {
-        const res = await fetch('/api/leaderboard');
+        const res = await fetch(leaderboardEndpoint);
         if (!res.ok) throw new Error('Falha ao carregar o placar');
         const data = await res.json();
         const placar = Array.isArray(data.record) ? data.record : Array.isArray(data) ? data : [];
@@ -938,8 +954,48 @@
       let tokenDoNavegador = localStorage.getItem(playerTokenKey);
       if (!tokenDoNavegador) tokenDoNavegador = generateToken();
 
+      if (!leaderboardApiAvailable) {
+        try {
+          const cache = localStorage.getItem(leaderboardCacheKey);
+          let placar = cache ? JSON.parse(cache) : [];
+
+          if (!Array.isArray(placar)) placar = [];
+
+          const jogadorExistente = placar.find((p) => p.nome === nomeDoJogador);
+          if (jogadorExistente) {
+            if (jogadorExistente.token !== tokenDoNavegador) {
+              submitMsg.textContent = 'Modo local: este nome já pertence a outro token salvo neste navegador.';
+              submitMsg.style.color = 'var(--warning)';
+              return;
+            }
+            if (tempoAlcancado > jogadorExistente.tempo) {
+              jogadorExistente.tempo = tempoAlcancado;
+            }
+          } else {
+            placar.push({ nome: nomeDoJogador, tempo: tempoAlcancado, token: tokenDoNavegador });
+          }
+
+          placar.sort((a, b) => b.tempo - a.tempo);
+          placar = placar.slice(0, 10);
+
+          syncedTime = tempoAlcancado;
+          localStorage.setItem(syncedScoreKey, String(syncedTime));
+          localStorage.setItem(playerTokenKey, tokenDoNavegador);
+          localStorage.setItem(leaderboardCacheKey, JSON.stringify(placar));
+
+          submitMsg.textContent = 'Modo local: placar salvo apenas neste navegador.';
+          submitMsg.style.color = 'var(--warning)';
+          renderLeaderboard(placar);
+          return;
+        } catch (error) {
+          submitMsg.textContent = 'Modo local indisponível: placar corrompido.';
+          submitMsg.style.color = 'var(--danger)';
+          return;
+        }
+      }
+
       try {
-        const res = await fetch('/api/leaderboard', {
+        const res = await fetch(leaderboardEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
