@@ -77,14 +77,16 @@ export default async function handler(req, res) {
     const nome = typeof body.nome === 'string' ? body.nome.trim() : '';
     const token = typeof body.token === 'string' ? body.token.trim() : '';
     const tempo = Number(body.tempo);
+    const clientRecord = normalizeLeaderboard(body.record);
 
     if (!nome || !token || !Number.isFinite(tempo) || tempo <= 0) {
       return sendJson(res, 400, { error: 'Nome, token e tempo são obrigatórios.' });
     }
 
     try {
-      const latest = await fetchLatestLeaderboard(binUrl, apiKey);
-      const placar = latest.record;
+      const placar = clientRecord.length > 0
+        ? clientRecord
+        : (await fetchLatestLeaderboard(binUrl, apiKey)).record;
       const jogadorIndex = placar.findIndex((p) => p && p.nome === nome);
       let updated = false;
       let syncedTime = tempo;

@@ -375,7 +375,7 @@
 
     const mouse = {
       x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, lastMoveTs: 0,
-      radius: 3, 
+      radius: 4,
       visible: true
     };
 
@@ -954,44 +954,43 @@
       let tokenDoNavegador = localStorage.getItem(playerTokenKey);
       if (!tokenDoNavegador) tokenDoNavegador = generateToken();
 
-      if (!leaderboardApiAvailable) {
-        try {
-          const cache = localStorage.getItem(leaderboardCacheKey);
-          let placar = cache ? JSON.parse(cache) : [];
+      let placarBase = [];
+      try {
+        const cache = localStorage.getItem(leaderboardCacheKey);
+        placarBase = cache ? JSON.parse(cache) : [];
+        if (!Array.isArray(placarBase)) placarBase = [];
+      } catch (error) {
+        placarBase = [];
+      }
 
-          if (!Array.isArray(placar)) placar = [];
-
-          const jogadorExistente = placar.find((p) => p.nome === nomeDoJogador);
-          if (jogadorExistente) {
-            if (jogadorExistente.token !== tokenDoNavegador) {
-              submitMsg.textContent = 'Modo local: este nome já pertence a outro token salvo neste navegador.';
-              submitMsg.style.color = 'var(--warning)';
-              return;
-            }
-            if (tempoAlcancado > jogadorExistente.tempo) {
-              jogadorExistente.tempo = tempoAlcancado;
-            }
-          } else {
-            placar.push({ nome: nomeDoJogador, tempo: tempoAlcancado, token: tokenDoNavegador });
-          }
-
-          placar.sort((a, b) => b.tempo - a.tempo);
-          placar = placar.slice(0, 10);
-
-          syncedTime = tempoAlcancado;
-          localStorage.setItem(syncedScoreKey, String(syncedTime));
-          localStorage.setItem(playerTokenKey, tokenDoNavegador);
-          localStorage.setItem(leaderboardCacheKey, JSON.stringify(placar));
-
-          submitMsg.textContent = 'Modo local: placar salvo apenas neste navegador.';
+      const jogadorExistenteLocal = placarBase.find((p) => p.nome === nomeDoJogador);
+      if (jogadorExistenteLocal) {
+        if (jogadorExistenteLocal.token && jogadorExistenteLocal.token !== tokenDoNavegador) {
+          submitMsg.textContent = 'Modo local: este nome já pertence a outro token salvo neste navegador.';
           submitMsg.style.color = 'var(--warning)';
-          renderLeaderboard(placar);
-          return;
-        } catch (error) {
-          submitMsg.textContent = 'Modo local indisponível: placar corrompido.';
-          submitMsg.style.color = 'var(--danger)';
           return;
         }
+
+        if (tempoAlcancado > jogadorExistenteLocal.tempo) {
+          jogadorExistenteLocal.tempo = tempoAlcancado;
+        }
+      } else {
+        placarBase.push({ nome: nomeDoJogador, tempo: tempoAlcancado, token: tokenDoNavegador });
+      }
+
+      placarBase.sort((a, b) => b.tempo - a.tempo);
+      placarBase = placarBase.slice(0, 10);
+
+      if (!leaderboardApiAvailable) {
+        syncedTime = tempoAlcancado;
+        localStorage.setItem(syncedScoreKey, String(syncedTime));
+        localStorage.setItem(playerTokenKey, tokenDoNavegador);
+        localStorage.setItem(leaderboardCacheKey, JSON.stringify(placarBase));
+
+        submitMsg.textContent = 'Modo local: placar salvo apenas neste navegador.';
+        submitMsg.style.color = 'var(--warning)';
+        renderLeaderboard(placarBase);
+        return;
       }
 
       try {
@@ -1001,7 +1000,8 @@
           body: JSON.stringify({
             nome: nomeDoJogador,
             tempo: tempoAlcancado,
-            token: tokenDoNavegador
+            token: tokenDoNavegador,
+            record: placarBase
           })
         });
 
@@ -1010,7 +1010,7 @@
           throw new Error(payload.error || 'Erro ao salvar o placar.');
         }
 
-        const placar = Array.isArray(payload.record) ? payload.record : [];
+        const placar = Array.isArray(payload.record) ? payload.record : placarBase;
         const tempoSincronizado = typeof payload.syncedTime === 'number' ? payload.syncedTime : tempoAlcancado;
         const foiAtualizado = payload.updated !== false;
 
@@ -1026,8 +1026,13 @@
         return;
 
       } catch (err) {
-        submitMsg.textContent = err.message || 'Erro ao conectar.';
-        submitMsg.style.color = 'var(--danger)';
+        syncedTime = tempoAlcancado;
+        localStorage.setItem(syncedScoreKey, String(syncedTime));
+        localStorage.setItem(playerTokenKey, tokenDoNavegador);
+        localStorage.setItem(leaderboardCacheKey, JSON.stringify(placarBase));
+        submitMsg.textContent = err.message || 'Erro ao conectar. Salvando apenas localmente.';
+        submitMsg.style.color = 'var(--warning)';
+        renderLeaderboard(placarBase);
       }
     }
 
