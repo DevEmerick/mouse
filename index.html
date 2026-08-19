@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fuja com o Mouse</title>
+  <style>
+    :root {
+      --bg: #060814;
+      --bg-2: #0b1022;
+      --panel: rgba(12, 17, 34, 0.72);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --text: #e8eefc;
+      --muted: #9aa8c7;
+      --accent: #66e3ff;
+      --danger: #ff5f6d;
+      --warning: #ffb547;
+      --good: #47e6a3;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(102, 227, 255, 0.18), transparent 32%),
+        radial-gradient(circle at 80% 10%, rgba(255, 95, 109, 0.16), transparent 26%),
+        radial-gradient(circle at 50% 90%, rgba(71, 230, 163, 0.12), transparent 30%),
+        linear-gradient(180deg, var(--bg), var(--bg-2));
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      user-select: none;
+      touch-action: none;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+      opacity: 0.32;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: none;
+    }
+
+    #hud {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      right: 18px;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .hud-card {
+      min-width: 140px;
+      padding: 12px 14px;
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+    }
+
+    .hud-label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .hud-value {
+      font-size: 30px;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .hud-sub {
+      margin-top: 4px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      background:
+        radial-gradient(circle at center, rgba(13, 17, 36, 0.38), rgba(6, 8, 20, 0.92)),
+        linear-gradient(180deg, rgba(6, 8, 20, 0.2), rgba(6, 8, 20, 0.86));
+      padding: 24px;
+    }
+
+    .panel {
+      width: min(720px, 100%);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 28px;
+      background: rgba(9, 13, 28, 0.72);
+      backdrop-filter: blur(24px);
+      box-shadow: 0 30px 120px rgba(0, 0, 0, 0.55);
+      padding: 30px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: -80px;
+      background:
+        radial-gradient(circle at 18% 25%, rgba(102, 227, 255, 0.16), transparent 22%),
+        radial-gradient(circle at 82% 12%, rgba(255, 95, 109, 0.18), transparent 18%),
+        radial-gradient(circle at 50% 100%, rgba(71, 230, 163, 0.12), transparent 24%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--accent);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      position: relative;
+      margin: 0;
+      font-size: clamp(42px, 6vw, 76px);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+    }
+
+    h1 .danger {
+      color: var(--danger);
+    }
+
+    p {
+      position: relative;
+      max-width: 58ch;
+      margin: 18px auto 0;
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .actions {
+      position: relative;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 26px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 22px;
+      font: inherit;
+      font-weight: 800;
+      font-size: 16px;
+      color: #08111c;
+      background: linear-gradient(135deg, var(--accent), #9cf7ff);
+      cursor: pointer;
+      box-shadow: 0 18px 40px rgba(102, 227, 255, 0.28);
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px) scale(1.01);
+      filter: brightness(1.05);
+    }
+
+    .ghost {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: none;
+    }
+
+    .stats {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 26px;
+    }
+
+    .stat-box {
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: left;
+    }
+
+    .stat-box span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .stat-box strong {
+      font-size: 22px;
+      color: var(--text);
+    }
+
+    #footerHint {
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      padding: 12px 16px;
+      border-radius: 999px;
+      background: rgba(7, 10, 18, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text);
+      font-size: 14px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      z-index: 12;
+      backdrop-filter: blur(10px);
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-4px);
+    }
+
+    @media (max-width: 720px) {
+      #hud {
+        top: 12px;
+        left: 12px;
+        right: 12px;
+      }
+
+      .hud-card {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .hud-value {
+        font-size: 24px;
+      }
+
+      .panel {
+        padding: 22px;
+        border-radius: 22px;
+      }
+
+      p {
+        font-size: 16px;
+      }
+
+      .stats {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="hud" aria-hidden="true">
+    <div class="hud-card">
+      <span class="hud-label">Tempo</span>
+      <div class="hud-value"><span id="timeDisplay">0.0</span>s</div>
+      <div class="hud-sub">Sobreviva o máximo possível</div>
+    </div>
+    <div class="hud-card" style="text-align:right;">
+      <span class="hud-label">Melhor marca</span>
+      <div class="hud-value"><span id="bestDisplay">0.0</span>s</div>
+      <div class="hud-sub">Registrado no navegador</div>
+    </div>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="overlay">
+    <div class="panel">
+      <div class="eyebrow">Mouse Avoider</div>
+      <h1>Fuja do <span class="danger">GlitchBot</span></h1>
+      <p>
+        Mantenha o cursor vivo enquanto o robô tenta te encurralar com dashes, tiros e teleporte.
+        A velocidade cresce com o tempo e a tela fica cada vez mais caótica.
+      </p>
+
+      <div class="stats">
+        <div class="stat-box">
+          <span>Objetivo</span>
+          <strong>Não encostar</strong>
+        </div>
+        <div class="stat-box">
+          <span>Controles</span>
+          <strong>Mouse / toque</strong>
+        </div>
+        <div class="stat-box">
+          <span>Estratégia</span>
+          <strong>Mover sem parar</strong>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="startBtn">Iniciar fuga</button>
+        <button id="demoBtn" class="ghost">Ver dicas rápidas</button>
+      </div>
+
+      <div id="footerHint">Dica: em tela touch, arraste o dedo para controlar o cursor invisível.</div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const demoBtn = document.getElementById('demoBtn');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const bestDisplay = document.getElementById('bestDisplay');
+    const toast = document.getElementById('toast');
+
+    const bestScoreKey = 'mouse-avoid-best-time';
+    let bestTime = Number(localStorage.getItem(bestScoreKey) || 0);
+    bestDisplay.textContent = bestTime.toFixed(1);
+
+    const state = {
+      running: false,
+      ended: false,
+      lastTs: 0,
+      startTs: 0,
+      time: 0,
+      dpr: Math.max(1, Math.min(2, window.devicePixelRatio || 1)),
+      shake: 0,
+      flash: 0,
+      pointerInside: true
+    };
+
+    const world = {
+      width: 0,
+      height: 0,
+      stars: []
+    };
+
+    const mouse = {
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      lastX: 0,
+      lastY: 0,
+      lastMoveTs: 0,
+      radius: 5,
+      visible: true
+    };
+
+    let bot;
+    let projectiles = [];
+    let particles = [];
+    let enemies = [];
+    let bossClones = [];
+    let spawnTimer = 0;
+    let botAttackTimer = 0;
+    let botState = 'CHASE';
+    let botStateTimer = 0;
+    let dashVector = { x: 0, y: 0 };
+    let teleportTarget = null;
+    let titleFlashTimer = 0;
+
+    function rand(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function resizeCanvas() {
+      state.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      canvas.width = Math.floor(width * state.dpr);
+      canvas.height = Math.floor(height * state.dpr);
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+
+      world.width = width;
+      world.height = height;
+
+      if (mouse.x === 0 && mouse.y === 0) {
+        mouse.x = width / 2;
+        mouse.y = height / 2;
+      }
+
+      world.stars = Array.from({ length: Math.max(70, Math.floor((width * height) / 18000)) }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        r: rand(0.8, 2.2),
+        s: rand(0.08, 0.4),
+        hue: rand(180, 220)
+      }));
+    }
+
+    function resetGame() {
+      bot = {
+        x: 120,
+        y: 120,
+        radius: 18,
+        baseSpeed: 170,
+        color: '#ff5f6d',
+        eyeAngle: 0
+      };
+
+      projectiles = [];
+      particles = [];
+      enemies = [];
+      bossClones = [];
+      spawnTimer = 0;
+      botAttackTimer = 0;
+      botState = 'CHASE';
+      botStateTimer = 0;
+      dashVector = { x: 0, y: 0 };
+      teleportTarget = null;
+      bot.alpha = 1;
+      state.shake = 0;
+      state.flash = 0;
+      titleFlashTimer = 0;
+      state.ended = false;
+      mouse.visible = true;
+      mouse.vx = 0;
+      mouse.vy = 0;
+      mouse.lastMoveTs = 0;
+      timeDisplay.textContent = '0.0';
+      overlay.style.display = 'none';
+    }
+
+    function startGame() {
+      resetGame();
+      state.running = true;
+      state.startTs = performance.now();
+      state.lastTs = state.startTs;
+      requestAnimationFrame(loop);
+      showToast('Boa sorte. O robô aprende enquanto você corre.');
+    }
+
+    function endGame(reason = 'Você foi pego') {
+      if (state.ended) return;
+      state.running = false;
+      state.ended = true;
+      mouse.visible = true;
+
+      if (state.time > bestTime) {
+        bestTime = state.time;
+        localStorage.setItem(bestScoreKey, String(bestTime));
+        bestDisplay.textContent = bestTime.toFixed(1);
+      }
+
+      overlay.style.display = 'flex';
+      document.querySelector('h1').innerHTML = reason === 'Você foi pego'
+        ? 'Você foi <span class="danger">capturado</span>'
+        : 'Fim da <span class="danger">fuga</span>';
+      document.querySelector('#overlay p').innerHTML =
+        `O GlitchBot venceu depois de <strong>${state.time.toFixed(1)} segundos</strong>.<br>Seu melhor tempo agora é <strong>${bestTime.toFixed(1)} segundos</strong>.`;
+      startBtn.textContent = 'Tentar novamente';
+      demoBtn.textContent = 'Rever dicas rápidas';
+      state.flash = 1;
+      drawOverlayFrame();
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    function spawnParticles(x, y, color, amount = 10, spread = 1.8, speed = 160) {
+      for (let i = 0; i < amount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = rand(0, spread);
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * rand(speed * 0.25, speed) * 0.016,
+          vy: Math.sin(angle) * rand(speed * 0.25, speed) * 0.016,
+          life: rand(0.35, 0.85),
+          maxLife: 1,
+          size: rand(1.5, 3.8) + dist,
+          color
+        });
+      }
+    }
+
+    function spawnProjectile(x, y, targetX, targetY, speed = 380, color = '#ffb547') {
+      const dx = targetX - x;
+      const dy = targetY - y;
+      const distance = Math.hypot(dx, dy) || 1;
+      const vx = (dx / distance) * speed;
+      const vy = (dy / distance) * speed;
+      projectiles.push({
+        x,
+        y,
+        vx,
+        vy,
+        radius: rand(3.5, 5.5),
+        color,
+        kind: 'straight',
+        turnRate: 0,
+        life: 4
+      });
+    }
+
+    function spawnHomingProjectile(x, y, targetX, targetY, speed = 260, color = '#66e3ff') {
+      const dx = targetX - x;
+      const dy = targetY - y;
+      const distance = Math.hypot(dx, dy) || 1;
+      projectiles.push({
+        x,
+        y,
+        vx: (dx / distance) * speed,
+        vy: (dy / distance) * speed,
+        radius: rand(4, 6),
+        color,
+        kind: 'homing',
+        turnRate: rand(2.2, 4.2),
+        life: 5
+      });
+    }
+
+    function spawnBossClone(x, y, phase, duration = 2.4) {
+      bossClones.push({
+        x,
+        y,
+        radius: rand(13, 16),
+        speed: rand(140, 190) + phase * 2.4,
+        hue: phase > 25 ? '#47e6a3' : '#66e3ff',
+        wobble: Math.random() * Math.PI * 2,
+        life: duration,
+        burstTimer: rand(0.12, 0.32),
+        shotDone: false
+      });
+    }
+
+    function spawnEnemyAt(x, y, type = 'interceptor', forcedSpeed = 0) {
+      const isOrbiter = type === 'orbiter';
+      const isFlanker = type === 'flanker';
+
+      enemies.push({
+        x,
+        y,
+        radius: rand(8, 13),
+        speed: forcedSpeed || rand(90, 140) + state.time * (isOrbiter ? 2.2 : 3.4),
+        type,
+        orbitAngle: Math.random() * Math.PI * 2,
+        orbitRadius: rand(52, 120),
+        orbitSpin: rand(0.6, 1.4) * (Math.random() > 0.5 ? 1 : -1),
+        wobble: Math.random() * Math.PI * 2,
+        turnBias: isOrbiter ? 0.62 : isFlanker ? 0.84 : 1,
+        pursueLag: rand(0.12, 0.42),
+        flankSide: Math.random() > 0.5 ? 1 : -1,
+        hue: isOrbiter ? '#66e3ff' : isFlanker ? '#47e6a3' : '#ff5f6d'
+      });
+    }
+
+    function spawnEnemy() {
+      const side = Math.floor(Math.random() * 4);
+      let x = 0;
+      let y = 0;
+
+      if (side === 0) {
+        x = rand(0, world.width);
+        y = -24;
+      } else if (side === 1) {
+        x = world.width + 24;
+        y = rand(0, world.height);
+      } else if (side === 2) {
+        x = rand(0, world.width);
+        y = world.height + 24;
+      } else {
+        x = -24;
+        y = rand(0, world.height);
+      }
+
+      const enemyTypes = ['interceptor', 'orbiter', 'flanker'];
+      if (state.time > 18) enemyTypes.push('hunter');
+      if (state.time > 30) enemyTypes.push('orbiter', 'flanker');
+      const type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+      spawnEnemyAt(x, y, type);
+    }
+
+    function pointerToWorld(event) {
+      const rect = canvas.getBoundingClientRect();
+      const nextX = clamp(event.clientX - rect.left, 0, world.width);
+      const nextY = clamp(event.clientY - rect.top, 0, world.height);
+      const now = performance.now();
+      const deltaSeconds = mouse.lastMoveTs ? Math.max(0.001, (now - mouse.lastMoveTs) / 1000) : 0;
+
+      mouse.vx = deltaSeconds ? (nextX - mouse.x) / deltaSeconds : 0;
+      mouse.vy = deltaSeconds ? (nextY - mouse.y) / deltaSeconds : 0;
+      mouse.lastX = mouse.x;
+      mouse.lastY = mouse.y;
+      mouse.x = nextX;
+      mouse.y = nextY;
+      mouse.lastMoveTs = now;
+      mouse.visible = true;
+    }
+
+    function getMousePrediction(enemy) {
+      const leadTime = clamp(0.18 + state.time * 0.01 + enemy.speed / 1200, 0.18, 0.62);
+      const predictedX = clamp(mouse.x + mouse.vx * leadTime, 0, world.width);
+      const predictedY = clamp(mouse.y + mouse.vy * leadTime, 0, world.height);
+      return { x: predictedX, y: predictedY };
+    }
+
+    function getBossAimPoint(phase, aggression = 1) {
+      const baseLead = clamp(0.22 + phase * 0.012, 0.22, 0.78);
+      const leadTime = baseLead * aggression;
+      return {
+        x: clamp(mouse.x + mouse.vx * leadTime, 0, world.width),
+        y: clamp(mouse.y + mouse.vy * leadTime, 0, world.height)
+      };
+    }
+
+    function getEnemyTarget(enemy) {
+      const predicted = getMousePrediction(enemy);
+      const dx = predicted.x - mouse.x;
+      const dy = predicted.y - mouse.y;
+      const movementLength = Math.hypot(mouse.vx, mouse.vy) || 1;
+      const moveX = mouse.vx / movementLength;
+      const moveY = mouse.vy / movementLength;
+      const perpX = -moveY;
+      const perpY = moveX;
+
+      if (enemy.type === 'orbiter') {
+        enemy.orbitAngle += enemy.orbitSpin * 0.025;
+        const orbitRadius = enemy.orbitRadius + Math.sin(enemy.orbitAngle * 1.7) * 14;
+        return {
+          x: clamp(mouse.x + Math.cos(enemy.orbitAngle) * orbitRadius, 0, world.width),
+          y: clamp(mouse.y + Math.sin(enemy.orbitAngle) * orbitRadius, 0, world.height)
+        };
+      }
+
+      if (enemy.type === 'flanker') {
+        return {
+          x: clamp(predicted.x + perpX * enemy.orbitRadius * enemy.flankSide, 0, world.width),
+          y: clamp(predicted.y + perpY * enemy.orbitRadius * enemy.flankSide, 0, world.height)
+        };
+      }
+
+      if (enemy.type === 'hunter') {
+        return {
+          x: clamp(predicted.x + dx * 0.12, 0, world.width),
+          y: clamp(predicted.y + dy * 0.12, 0, world.height)
+        };
+      }
+
+      return predicted;
+    }
+
+    function teleportBoss(phase, preferEdge = false) {
+      const angle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
+      const offsetAngle = angle + Math.PI + rand(-0.85, 0.85);
+      const distanceAway = preferEdge ? rand(190, 260) : rand(120, 210);
+      const nextX = clamp(mouse.x + Math.cos(offsetAngle) * distanceAway, 30, world.width - 30);
+      const nextY = clamp(mouse.y + Math.sin(offsetAngle) * distanceAway, 30, world.height - 30);
+      bot.x = nextX;
+      bot.y = nextY;
+      bot.alpha = 0;
+      teleportTarget = { x: nextX, y: nextY, phase, fadeIn: 0 };
+      spawnParticles(nextX, nextY, '#66e3ff', 22, 2.2, 240);
+      spawnBossRingShot(nextX, nextY, 8 + Math.min(6, Math.floor(phase / 10)), 280 + phase * 4, '#66e3ff');
+    }
+
+    function spawnBossRingShot(x, y, count, speed, color) {
+      const angleOffset = Math.random() * Math.PI * 2;
+      for (let i = 0; i < count; i++) {
+        const angle = angleOffset + (Math.PI * 2 * i) / count;
+        projectiles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          radius: rand(3.2, 5.2),
+          color
+        });
+      }
+    }
+
+    function spawnBossFan(x, y, targetX, targetY, spreadCount, speed, color) {
+      const angle = Math.atan2(targetY - y, targetX - x);
+      const half = (spreadCount - 1) / 2;
+      for (let i = 0; i < spreadCount; i++) {
+        const offset = (i - half) * 0.18;
+        projectiles.push({
+          x,
+          y,
+          vx: Math.cos(angle + offset) * speed,
+          vy: Math.sin(angle + offset) * speed,
+          radius: rand(3.4, 5.4),
+          color
+        });
+      }
+    }
+
+    function spawnBossSweep(originX, originY, baseAngle, spread, count, speed, color) {
+      for (let i = 0; i < count; i++) {
+        const ratio = count === 1 ? 0.5 : i / (count - 1);
+        const angle = baseAngle - spread / 2 + spread * ratio;
+        projectiles.push({
+          x: originX,
+          y: originY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          radius: rand(3, 5),
+          color
+        });
+      }
+    }
+
+    function chooseBossPattern() {
+      const options = ['DASH', 'SHOOT'];
+      if (state.time > 8) options.push('TELEPORT');
+      if (state.time > 14) options.push('HOMING');
+      if (state.time > 20) options.push('PURSUE');
+      if (state.time > 22) options.push('CLONE');
+      if (state.time > 28) options.push('SWEEP');
+      if (state.time > 34) options.push('SUMMON');
+      if (state.time > 42) options.push('RING');
+      if (state.time > 50) options.push('BERSERK');
+
+      const filtered = options.filter((pattern) => pattern !== botState);
+      const pool = filtered.length ? filtered : options;
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    function summonMinions(amount) {
+      for (let i = 0; i < amount; i++) {
+        const angle = (Math.PI * 2 * i) / amount + Math.random() * 0.45;
+        const distance = rand(150, 260);
+        const x = clamp(mouse.x + Math.cos(angle) * distance, 24, world.width - 24);
+        const y = clamp(mouse.y + Math.sin(angle) * distance, 24, world.height - 24);
+        const type = i % 3 === 0 ? 'orbiter' : i % 2 === 0 ? 'flanker' : 'hunter';
+        spawnEnemyAt(x, y, type, rand(110, 180) + state.time * 2.5);
+      }
+    }
+
+    function updateBot(dt) {
+      const dx = mouse.x - bot.x;
+      const dy = mouse.y - bot.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      const dirX = dx / distance;
+      const dirY = dy / distance;
+      const phase = state.time;
+
+      bot.baseSpeed = 165 + phase * 11;
+      bot.eyeAngle = Math.atan2(dy, dx);
+      botAttackTimer += dt;
+      botStateTimer += dt;
+
+      if (distance < bot.radius + mouse.radius + 4) {
+        spawnParticles(mouse.x, mouse.y, '#ff5f6d', 28, 2.4, 220);
+        endGame();
+        return;
+      }
+
+      switch (botState) {
+        case 'CHASE': {
+          const threat = distance < 220 ? 1.2 : 1;
+          const lead = getBossAimPoint(phase, threat);
+          const chaseX = lead.x - bot.x;
+          const chaseY = lead.y - bot.y;
+          const chaseLength = Math.hypot(chaseX, chaseY) || 1;
+          const chaseDirX = chaseX / chaseLength;
+          const chaseDirY = chaseY / chaseLength;
+          const agility = 1 + Math.min(2.8, phase / 16) + (distance < 230 ? 0.18 : 0);
+          bot.x += chaseDirX * bot.baseSpeed * agility * dt;
+          bot.y += chaseDirY * bot.baseSpeed * agility * dt;
+
+          if (distance < 190 && botAttackTimer > 0.42) {
+            botAttackTimer = 0;
+            botStateTimer = 0;
+            botState = 'PURSUE';
+            dashVector = { x: chaseDirX, y: chaseDirY };
+            spawnParticles(bot.x, bot.y, '#ffb547', 14, 2.0, 160);
+            teleportTarget = null;
+          } else if (botAttackTimer > Math.max(0.58, 1.45 - phase * 0.03)) {
+            botAttackTimer = 0;
+            botStateTimer = 0;
+            botState = chooseBossPattern();
+            dashVector = { x: chaseDirX, y: chaseDirY };
+            spawnParticles(bot.x, bot.y, '#e8eefc', 18, 2.2, 170);
+            teleportTarget = null;
+          }
+          break;
+        }
+
+        case 'DASH': {
+          if (botStateTimer < 0.14) {
+            bot.color = '#ffffff';
+          } else {
+            bot.color = '#ff5f6d';
+          }
+          bot.x += dashVector.x * (bot.baseSpeed * 3.3) * dt;
+          bot.y += dashVector.y * (bot.baseSpeed * 3.3) * dt;
+          if (botStateTimer > 0.48) {
+            bot.color = '#ff5f6d';
+            botState = 'CHASE';
+            botStateTimer = 0;
+          }
+          break;
+        }
+
+        case 'PURSUE': {
+          const aim = getBossAimPoint(phase, 1.6);
+          const pursueX = aim.x - bot.x;
+          const pursueY = aim.y - bot.y;
+          const pursueLength = Math.hypot(pursueX, pursueY) || 1;
+          const pursueDirX = pursueX / pursueLength;
+          const pursueDirY = pursueY / pursueLength;
+
+          if (botStateTimer < 0.08) {
+            bot.color = '#ffb547';
+          }
+
+          bot.x += pursueDirX * (bot.baseSpeed * 3.2) * dt;
+          bot.y += pursueDirY * (bot.baseSpeed * 3.2) * dt;
+
+          if (botStateTimer > 0.10 && botStateTimer < 0.14) {
+            spawnHomingProjectile(bot.x, bot.y, mouse.x, mouse.y, 280 + phase * 2.2, '#66e3ff');
+          }
+
+          if (distance < bot.radius + mouse.radius + 14) {
+            spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 3, 430, '#f0f4ff');
+          }
+
+          if (botStateTimer > 0.30) {
+            bot.color = '#ff5f6d';
+            botState = 'CHASE';
+            botStateTimer = 0;
+          }
+          break;
+        }
+
+        case 'SHOOT': {
+          if (botStateTimer > 0.12 && botStateTimer < 0.18) {
+            bot.color = '#ffb547';
+            spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 4, 410, '#ffb547');
+          }
+          if (botStateTimer > 0.33 && botStateTimer < 0.39) {
+            spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 260 + phase * 1.4, '#66e3ff');
+          }
+          if (botStateTimer > 0.54 && botStateTimer < 0.60) {
+            spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 4, 500, '#ff5f6d');
+            bot.color = '#ff5f6d';
+          }
+          if (botStateTimer > 0.86) {
+            botState = 'CHASE';
+            botStateTimer = 0;
+            bot.color = '#ff5f6d';
+          }
+          break;
+        }
+
+        case 'TELEPORT': {
+          if (botStateTimer < 0.14) {
+            bot.radius = Math.max(0, bot.radius - 130 * dt);
+            bot.alpha = Math.max(0, bot.alpha - 5 * dt);
+          }
+          if (botStateTimer >= 0.14 && !teleportTarget) {
+            teleportBoss(phase, true);
+          }
+          if (teleportTarget) {
+            teleportTarget.fadeIn += dt * 4.4;
+            bot.alpha = Math.min(1, teleportTarget.fadeIn);
+          }
+          if (botStateTimer > 0.28 && botStateTimer < 0.44) {
+            bot.radius = Math.min(18, bot.radius + 90 * dt);
+          }
+          if (botStateTimer > 0.62) {
+            bot.radius = 18;
+            botState = 'CHASE';
+            botStateTimer = 0;
+            teleportTarget = null;
+            bot.alpha = 1;
+          }
+          break;
+        }
+
+        case 'HOMING': {
+          if (botStateTimer < 0.12) {
+            bot.color = '#66e3ff';
+          }
+          if (botStateTimer > 0.08 && botStateTimer < 0.16) {
+            const projectileSpeed = 220 + phase * 2.2;
+            spawnHomingProjectile(bot.x, bot.y, mouse.x, mouse.y, projectileSpeed, '#66e3ff');
+          }
+          if (botStateTimer > 0.28 && botStateTimer < 0.34) {
+            spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 300 + phase * 1.6, '#ff5f6d');
+          }
+          if (botStateTimer > 0.92) {
+            bot.color = '#ff5f6d';
+            botState = 'CHASE';
+            botStateTimer = 0;
+          }
+          break;
+        }
+
+        case 'CLONE': {
+          if (botStateTimer < 0.12) {
+            bot.color = '#f0f4ff';
+            bot.alpha = 0.25;
+          }
+          if (botStateTimer > 0.14 && botStateTimer < 0.20 && bossClones.length === 0) {
+            const cloneCount = 2 + Math.min(2, Math.floor(phase / 16));
+            for (let i = 0; i < cloneCount; i++) {
+              const angle = (Math.PI * 2 * i) / cloneCount + Math.random() * 0.35;
+              const distance = rand(120, 220);
+              const cloneX = clamp(mouse.x + Math.cos(angle) * distance, 28, world.width - 28);
+              const cloneY = clamp(mouse.y + Math.sin(angle) * distance, 28, world.height - 28);
+              spawnBossClone(cloneX, cloneY, phase, 2.2 + i * 0.25);
+            }
+          }
+          if (botStateTimer > 0.28 && botStateTimer < 0.34) {
+            spawnBossRingShot(bot.x, bot.y, 8, 320 + phase * 3, '#66e3ff');
+            spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 280 + phase * 1.8, '#f0f4ff');
+          }
+          if (botStateTimer > 0.78) {
+            bot.color = '#ff5f6d';
+            bot.alpha = 1;
+            botState = 'CHASE';
+            botStateTimer = 0;
+          }
+          break;
+        }
+
+        case 'SWEEP': {
+          const sweepDirection = Math.sin(botStateTimer * 5) > 0 ? 1 : -1;
+          const targetY = clamp(mouse.y + sweepDirection * 130, 24, world.height - 24);
+          const targetX = clamp(mouse.x + Math.cos(botStateTimer * 3) * 150, 24, world.width - 24);
+          bot.x += clamp(targetX - bot.x, -1, 1) * (bot.baseSpeed * 1.7) * dt;
+          bot.y += clamp(targetY - bot.y, -1, 1) * (bot.baseSpeed * 1.7) * dt;
+
+          if (Math.floor(botStateTimer * 10) % 3 === 0) {
+            spawnBossSweep(bot.x, bot.y, Math.atan2(mouse.y - bot.y, mouse.x - bot.x), 1.1, 4, 360 + phase * 3, '#47e6a3');
+          }
+          if (botStateTimer > 1.1) {
+            botState = 'CHASE';
+            botStateTimer = 0;
+          }
+          break;
+        }
+
+        case 'SUMMON': {
+          if (botStateTimer < 0.14) {
+            bot.color = '#47e6a3';
+          }
+          if (botStateTimer > 0.18 && botStateTimer < 0.28) {
+            summonMinions(2 + Math.min(3, Math.floor(phase / 10)));
+          }
+          if (botStateTimer > 0.32 && botStateTimer < 0.36) {
+            spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 5, 440, '#47e6a3');
+          }
+          if (botStateTimer > 0.92) {
+            bot.color = '#ff5f6d';
+            botState = 'CHASE';
+            botStateTimer = 0;
+          }
+          break;
+        }
+
+        case 'RING': {
+          if (botStateTimer < 0.12) {
+            bot.color = '#66e3ff';
+          }
+          if (botStateTimer > 0.18 && botStateTimer < 0.22) {
+            spawnBossRingShot(bot.x, bot.y, 10 + Math.min(6, Math.floor(phase / 8)), 290 + phase * 5, '#66e3ff');
+          }
+          if (botStateTimer > 0.46 && botStateTimer < 0.50) {
+            spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 6, 500, '#ffb547');
+          }
+          if (botStateTimer > 0.82) {
+            bot.color = '#ff5f6d';
+            botState = 'CHASE';
+            botStateTimer = 0;
+          }
+          break;
+        }
+
+        case 'BERSERK': {
+          const pulseSpeed = 1.9 + Math.sin(botStateTimer * 8) * 0.4;
+          bot.x += dirX * bot.baseSpeed * pulseSpeed * dt;
+          bot.y += dirY * bot.baseSpeed * pulseSpeed * dt;
+          if (botStateTimer > 0.10 && botStateTimer < 0.14) {
+            spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 5, 520, '#ff5f6d');
+          }
+          if (botStateTimer > 0.26 && botStateTimer < 0.30) {
+            spawnBossRingShot(bot.x, bot.y, 12, 310 + phase * 4, '#f0f4ff');
+          }
+          if (botStateTimer > 0.44 && botStateTimer < 0.48) {
+            spawnBossSweep(bot.x, bot.y, Math.atan2(mouse.y - bot.y, mouse.x - bot.x), 1.6, 7, 480, '#ffb547');
+          }
+          if (botStateTimer > 0.78) {
+            botState = 'CHASE';
+            botStateTimer = 0;
+          }
+          break;
+        }
+      }
+
+      bot.x = clamp(bot.x, 18, world.width - 18);
+      bot.y = clamp(bot.y, 18, world.height - 18);
+    }
+
+    function updateProjectiles(dt) {
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        if (p.kind === 'homing') {
+          const dx = mouse.x - p.x;
+          const dy = mouse.y - p.y;
+          const distance = Math.hypot(dx, dy) || 1;
+          const speed = Math.max(220, Math.hypot(p.vx, p.vy));
+          const desiredVx = (dx / distance) * speed;
+          const desiredVy = (dy / distance) * speed;
+          p.vx += (desiredVx - p.vx) * p.turnRate * dt;
+          p.vy += (desiredVy - p.vy) * p.turnRate * dt;
+        }
+
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+
+        const distance = Math.hypot(mouse.x - p.x, mouse.y - p.y);
+        if (distance < p.radius + mouse.radius) {
+          spawnParticles(mouse.x, mouse.y, p.color, 18, 2.2, 220);
+          endGame('Você foi atingido');
+          return;
+        }
+
+        if (p.life <= 0 || p.x < -60 || p.x > world.width + 60 || p.y < -60 || p.y > world.height + 60) {
+          projectiles.splice(i, 1);
+        }
+      }
+    }
+
+    function updateBossClones(dt) {
+      for (let i = bossClones.length - 1; i >= 0; i--) {
+        const clone = bossClones[i];
+        clone.life -= dt;
+        clone.wobble += dt * 7;
+
+        const dx = mouse.x - clone.x;
+        const dy = mouse.y - clone.y;
+        const distance = Math.hypot(dx, dy) || 1;
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+        const orbitX = -dirY * Math.sin(clone.wobble) * 0.4;
+        const orbitY = dirX * Math.cos(clone.wobble) * 0.4;
+        clone.x += (dirX + orbitX) * clone.speed * dt;
+        clone.y += (dirY + orbitY) * clone.speed * dt;
+
+        if (!clone.shotDone) {
+          clone.burstTimer -= dt;
+          if (clone.burstTimer <= 0) {
+            spawnHomingProjectile(clone.x, clone.y, mouse.x, mouse.y, 250 + state.time * 2, clone.hue);
+            clone.shotDone = true;
+          }
+        }
+
+        if (distance < clone.radius + mouse.radius + 2) {
+          spawnParticles(mouse.x, mouse.y, clone.hue, 22, 2.6, 230);
+          endGame('Você foi cercado');
+          return;
+        }
+
+        if (clone.life <= 0) {
+          bossClones.splice(i, 1);
+        }
+      }
+    }
+
+    function updateEnemies(dt) {
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const enemy = enemies[i];
+        const target = getEnemyTarget(enemy);
+        const dx = target.x - enemy.x;
+        const dy = target.y - enemy.y;
+        const distance = Math.hypot(dx, dy) || 1;
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+
+        let separationX = 0;
+        let separationY = 0;
+        for (let j = 0; j < enemies.length; j++) {
+          if (i === j) continue;
+          const other = enemies[j];
+          const ox = enemy.x - other.x;
+          const oy = enemy.y - other.y;
+          const otherDistance = Math.hypot(ox, oy);
+          const desiredGap = enemy.radius + other.radius + 10;
+          if (otherDistance > 0 && otherDistance < desiredGap) {
+            const strength = (desiredGap - otherDistance) / desiredGap;
+            separationX += (ox / otherDistance) * strength;
+            separationY += (oy / otherDistance) * strength;
+          }
+        }
+
+        enemy.wobble += dt * 5;
+        const orbitStrength = enemy.type === 'orbiter' ? 0.54 : enemy.type === 'flanker' ? 0.36 : 0.18;
+        const orbitX = -dirY * Math.sin(enemy.wobble) * orbitStrength;
+        const orbitY = dirX * Math.cos(enemy.wobble) * orbitStrength;
+        const ringPull = enemy.type === 'orbiter' ? clamp((distance - enemy.orbitRadius) / enemy.orbitRadius, -1, 1) * 0.22 : 0;
+        const steerX = dirX * (enemy.turnBias + ringPull) + separationX * 1.05 + orbitX;
+        const steerY = dirY * (enemy.turnBias + ringPull) + separationY * 1.05 + orbitY;
+        const steerLength = Math.hypot(steerX, steerY) || 1;
+
+        const speedMultiplier = enemy.type === 'hunter' ? 1.18 : enemy.type === 'flanker' ? 1.08 : 1;
+        enemy.x += (steerX / steerLength) * enemy.speed * speedMultiplier * dt;
+        enemy.y += (steerY / steerLength) * enemy.speed * speedMultiplier * dt;
+
+        if (distance < enemy.radius + mouse.radius + 2) {
+          spawnParticles(mouse.x, mouse.y, enemy.hue, 22, 2.6, 230);
+          endGame('Você foi cercado');
+          return;
+        }
+
+        if (enemy.x < -80 || enemy.x > world.width + 80 || enemy.y < -80 || enemy.y > world.height + 80) {
+          enemies.splice(i, 1);
+        }
+      }
+    }
+
+    function updateParticles(dt) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const particle = particles[i];
+        particle.life -= dt;
+        particle.x += particle.vx * 60 * dt;
+        particle.y += particle.vy * 60 * dt;
+        particle.vy += 18 * dt;
+        if (particle.life <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+    }
+
+    function drawBackground() {
+      ctx.clearRect(0, 0, world.width, world.height);
+
+      const gradient = ctx.createRadialGradient(
+        world.width * 0.5,
+        world.height * 0.45,
+        30,
+        world.width * 0.5,
+        world.height * 0.5,
+        Math.max(world.width, world.height) * 0.72
+      );
+      gradient.addColorStop(0, 'rgba(15, 21, 46, 0.82)');
+      gradient.addColorStop(1, 'rgba(6, 8, 20, 1)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, world.width, world.height);
+
+      ctx.save();
+      ctx.globalAlpha = 0.7;
+      for (const star of world.stars) {
+        star.y += star.s * 18 * 0.016;
+        if (star.y > world.height + 4) {
+          star.y = -4;
+          star.x = Math.random() * world.width;
+        }
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${star.hue}, 100%, 85%, ${0.34 + star.r * 0.2})`;
+        ctx.fill();
+      }
+      ctx.restore();
+
+      if (state.shake > 0) {
+        const intensity = state.shake * 5;
+        const shakeX = rand(-intensity, intensity);
+        const shakeY = rand(-intensity, intensity);
+        ctx.translate(shakeX, shakeY);
+      }
+    }
+
+    function drawCursor() {
+      if (!mouse.visible) return;
+      ctx.save();
+      ctx.shadowBlur = 24;
+      ctx.shadowColor = 'rgba(102, 227, 255, 0.65)';
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#66e3ff';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 14, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(102, 227, 255, 0.22)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawBot() {
+      ctx.save();
+      ctx.globalAlpha = bot.alpha ?? 1;
+      ctx.shadowBlur = 24;
+      ctx.shadowColor = 'rgba(255, 95, 109, 0.45)';
+      ctx.beginPath();
+      ctx.arc(bot.x, bot.y, bot.radius, 0, Math.PI * 2);
+      ctx.fillStyle = bot.color;
+      ctx.fill();
+
+      const eyeAngle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
+      const eyeX = bot.x + Math.cos(eyeAngle) * 6;
+      const eyeY = bot.y + Math.sin(eyeAngle) * 6;
+      ctx.beginPath();
+      ctx.arc(eyeX, eyeY, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#08111c';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(bot.x, bot.y, bot.radius + 5, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 95, 109, 0.18)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawProjectiles() {
+      for (const p of projectiles) {
+        ctx.save();
+        ctx.shadowBlur = p.kind === 'homing' ? 22 : 18;
+        ctx.shadowColor = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+
+        if (p.kind === 'homing') {
+          ctx.globalAlpha = 0.35;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius + 6, 0, Math.PI * 2);
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    function drawBossClones() {
+      for (const clone of bossClones) {
+        ctx.save();
+        ctx.globalAlpha = 0.45 + Math.max(0, clone.life / 2.4) * 0.4;
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = clone.hue;
+        ctx.beginPath();
+        ctx.arc(clone.x, clone.y, clone.radius, 0, Math.PI * 2);
+        ctx.fillStyle = clone.hue;
+        ctx.fill();
+
+        ctx.globalAlpha = 0.22;
+        ctx.beginPath();
+        ctx.arc(clone.x, clone.y, clone.radius + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = clone.hue;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function drawEnemies() {
+      for (const enemy of enemies) {
+        ctx.save();
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = enemy.hue;
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+        ctx.fillStyle = enemy.hue;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawParticles() {
+      for (const particle of particles) {
+        const alpha = clamp(particle.life / particle.maxLife, 0, 1);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.size * alpha, 0, Math.PI * 2);
+        ctx.fillStyle = particle.color;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawVignette() {
+      const gradient = ctx.createRadialGradient(
+        world.width / 2,
+        world.height / 2,
+        Math.min(world.width, world.height) * 0.35,
+        world.width / 2,
+        world.height / 2,
+        Math.max(world.width, world.height) * 0.72
+      );
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0.46)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, world.width, world.height);
+    }
+
+    function drawOverlayFrame() {
+      if (!state.flash) return;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 95, 109, 0.12)';
+      ctx.fillRect(0, 0, world.width, world.height);
+      ctx.restore();
+    }
+
+    function loop(ts) {
+      if (!state.running) return;
+      const dt = Math.min(0.033, (ts - state.lastTs) / 1000 || 0.016);
+      state.lastTs = ts;
+      state.time = (ts - state.startTs) / 1000;
+      timeDisplay.textContent = state.time.toFixed(1);
+
+      spawnTimer += dt;
+      botAttackTimer += dt;
+      titleFlashTimer += dt;
+
+      if (spawnTimer > Math.max(1.2, 2.6 - state.time * 0.06)) {
+        spawnTimer = 0;
+        if (enemies.length < 8) {
+          spawnEnemy();
+        }
+      }
+
+      if (state.time > 12 && state.time % 5 < dt) {
+        state.shake = Math.min(1, state.shake + 0.15);
+      } else {
+        state.shake = Math.max(0, state.shake - dt * 0.6);
+      }
+
+      updateBot(dt);
+      updateProjectiles(dt);
+      updateBossClones(dt);
+      updateEnemies(dt);
+      updateParticles(dt);
+
+      ctx.save();
+      drawBackground();
+      drawParticles();
+      drawEnemies();
+      drawBossClones();
+      drawProjectiles();
+      drawBot();
+      drawCursor();
+      drawVignette();
+      drawOverlayFrame();
+      ctx.restore();
+
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('pointermove', pointerToWorld);
+    window.addEventListener('pointerdown', pointerToWorld);
+    window.addEventListener('pointerleave', () => {
+      state.pointerInside = false;
+      mouse.visible = true;
+    });
+    window.addEventListener('pointerenter', () => {
+      state.pointerInside = true;
+      mouse.visible = true;
+    });
+
+    window.addEventListener('blur', () => {
+      if (state.running) {
+        showToast('Volte para a janela para continuar fugindo.');
+      }
+    });
+
+    startBtn.addEventListener('click', startGame);
+    demoBtn.addEventListener('click', () => {
+      showToast('Toque/arraste, fique em movimento e tente prever os dashes.');
+    });
+
+    resizeCanvas();
+    mouse.x = world.width / 2;
+    mouse.y = world.height / 2;
+    drawOverlayFrame();
+  </script>
+</body>
+</html>
