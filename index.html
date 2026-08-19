@@ -736,23 +736,33 @@
     function updateEnemies(dt) {
       for (let i = enemies.length - 1; i >= 0; i--) {
         const enemy = enemies[i]; const target = getEnemyTarget(enemy);
-        const dx = target.x - enemy.x; const dy = target.y - enemy.y; const distance = Math.hypot(dx, dy) || 1;
-        const dirX = dx / distance; const dirY = dy / distance;
+        const dx = target.x - enemy.x; const dy = target.y - enemy.y;
+        
         let sepX = 0; let sepY = 0;
         for (let j = 0; j < enemies.length; j++) {
           if (i === j) continue; const other = enemies[j]; const ox = enemy.x - other.x; const oy = enemy.y - other.y; const od = Math.hypot(ox, oy);
           const gap = enemy.radius + other.radius + 35;
           if (od > 0 && od < gap) { const str = (gap - od) / gap; sepX += (ox / od) * str; sepY += (oy / od) * str; }
         }
+        
+        const distToTarget = Math.hypot(dx, dy) || 1;
+        const dirX = dx / distToTarget; const dirY = dy / distToTarget;
+
         enemy.wobble += dt * 5;
         const orbitStr = enemy.type === 'orbiter' ? 0.54 : enemy.type === 'flanker' ? 0.36 : 0.18;
-        const ringPull = enemy.type === 'orbiter' ? clamp((distance - enemy.orbitRadius) / enemy.orbitRadius, -1, 1) * 0.22 : 0;
+        
+        // Corrigido a distância para a força de anel usar a distância ao jogador, não ao alvo previsto
+        const distToPlayer = Math.hypot(mouse.x - enemy.x, mouse.y - enemy.y);
+        const ringPull = enemy.type === 'orbiter' ? clamp((distToPlayer - enemy.orbitRadius) / enemy.orbitRadius, -1, 1) * 0.22 : 0;
+        
         const sX = dirX * (enemy.turnBias + ringPull) + sepX * 4.5 - dirY * Math.sin(enemy.wobble) * orbitStr;
         const sY = dirY * (enemy.turnBias + ringPull) + sepY * 4.5 + dirX * Math.cos(enemy.wobble) * orbitStr;
         const sLen = Math.hypot(sX, sY) || 1; const spdMult = enemy.type === 'hunter' ? 1.18 : enemy.type === 'flanker' ? 1.08 : 1;
         enemy.x += (sX / sLen) * enemy.speed * spdMult * dt; enemy.y += (sY / sLen) * enemy.speed * spdMult * dt;
 
-        if (distance < enemy.radius + mouse.radius) { spawnParticles(mouse.x, mouse.y, enemy.hue, 22, 2.6, 230); endGame('Você foi cercado'); return; }
+        // O erro do toque "invisível" estava aqui. Agora calcula a colisão exata com o mouse
+        if (distToPlayer < enemy.radius + mouse.radius) { spawnParticles(mouse.x, mouse.y, enemy.hue, 22, 2.6, 230); endGame('Você foi cercado'); return; }
+        
         enemy.life -= dt;
         if (enemy.life <= 0 || enemy.x < -80 || enemy.x > world.width + 80 || enemy.y < -80 || enemy.y > world.height + 80) {
           spawnParticles(enemy.x, enemy.y, enemy.hue, 8, 1.5, 120); enemies.splice(i, 1);
@@ -885,22 +895,27 @@
 
     function renderLeaderboard(placarArray) {
       leaderboardList.innerHTML = '';
-      if (!placarArray || placarArray.length === 0) {
+      if (!Array.isArray(placarArray) || placarArray.length === 0) {
         leaderboardList.innerHTML = '<li style="color: var(--muted);">Nenhum recorde ainda.</li>';
         return;
       }
       
       const meuNome = localStorage.getItem(savedPlayerNameKey) || "";
       
-      // FILTRO: Remove silenciosamente o dummy GlitchBot para evitar lixo visual
-      const placarFiltrado = placarArray.filter(p => p.nome.toLowerCase() !== 'glitchbot');
+      // FILTRO CORRIGIDO: Valida se a propriedade existe antes de dar o toLowerCase (evita que a tela inteira quebre)
+      const placarFiltrado = placarArray.filter(p => p && p.nome && typeof p.nome === 'string' && p.nome.toLowerCase() !== 'glitchbot');
+
+      if (placarFiltrado.length === 0) {
+        leaderboardList.innerHTML = '<li style="color: var(--muted);">Nenhum recorde ainda.</li>';
+        return;
+      }
 
       placarFiltrado.slice(0, 5).forEach(p => {
         const li = document.createElement('li');
         const colorTitle = (p.nome === meuNome) ? 'var(--accent)' : 'inherit';
         const fontWeight = (p.nome === meuNome) ? '800' : 'normal';
         
-        li.innerHTML = `<strong style="color: ${colorTitle}; font-weight: ${fontWeight};">${p.nome}</strong> <span style="float: right; color: var(--accent); font-weight: 800;">${p.tempo.toFixed(1)}s</span>`;
+        li.innerHTML = `<strong style="color: ${colorTitle}; font-weight: ${fontWeight};">${p.nome}</strong> <span style="float: right; color: var(--accent); font-weight: 800;">${Number(p.tempo).toFixed(1)}s</span>`;
         li.style.marginBottom = '8px';
         leaderboardList.appendChild(li);
       });
@@ -911,7 +926,9 @@
       if (cache) {
         try {
           renderLeaderboard(JSON.parse(cache));
-        } catch(e) {}
+        } catch(e) {
+          leaderboardList.innerHTML = '<li style="color: var(--muted);">Nenhum recorde ainda.</li>';
+        }
       } else {
         leaderboardList.innerHTML = '<li style="color: var(--muted);">Nenhum recorde ainda.</li>';
       }
@@ -921,16 +938,7 @@
       if (forceRender) leaderboardList.innerHTML = '<li style="color: var(--muted);">Sincronizando placar...</li>';
 
       if (!leaderboardApiAvailable) {
-        const cache = localStorage.getItem(leaderboardCacheKey);
-        if (cache) {
-          try {
-            renderLeaderboard(JSON.parse(cache));
-          } catch (error) {
-            leaderboardList.innerHTML = '<li style="color: var(--muted);">Nenhum recorde ainda.</li>';
-          }
-        } else {
-          leaderboardList.innerHTML = '<li style="color: var(--muted);">Nenhum recorde ainda.</li>';
-        }
+        renderLeaderboardFromCache();
         return;
       }
       
@@ -938,6 +946,8 @@
         const res = await fetch(leaderboardEndpoint);
         if (!res.ok) throw new Error('Falha ao carregar o placar');
         const data = await res.json();
+        
+        // Garante que é array independente do que o backend retornar
         const placar = Array.isArray(data.record) ? data.record : Array.isArray(data) ? data : [];
         
         localStorage.setItem(leaderboardCacheKey, JSON.stringify(placar)); 
@@ -958,15 +968,15 @@
       try {
         const cache = localStorage.getItem(leaderboardCacheKey);
         placarBase = cache ? JSON.parse(cache) : [];
-        if (!Array.isArray(placarBase)) placarBase = [];
+        if (!Array.isArray(placarBase)) placarBase = []; // Proteção local adicional
       } catch (error) {
         placarBase = [];
       }
 
-      const jogadorExistenteLocal = placarBase.find((p) => p.nome === nomeDoJogador);
+      const jogadorExistenteLocal = placarBase.find((p) => p && p.nome === nomeDoJogador);
       if (jogadorExistenteLocal) {
         if (jogadorExistenteLocal.token && jogadorExistenteLocal.token !== tokenDoNavegador) {
-          submitMsg.textContent = 'Modo local: este nome já pertence a outro token salvo neste navegador.';
+          submitMsg.textContent = 'Aviso: Este apelido já tem dono.';
           submitMsg.style.color = 'var(--warning)';
           return;
         }
@@ -978,7 +988,7 @@
         placarBase.push({ nome: nomeDoJogador, tempo: tempoAlcancado, token: tokenDoNavegador });
       }
 
-      placarBase.sort((a, b) => b.tempo - a.tempo);
+      placarBase.sort((a, b) => Number(b.tempo || 0) - Number(a.tempo || 0));
       placarBase = placarBase.slice(0, 10);
 
       if (!leaderboardApiAvailable) {
@@ -987,8 +997,8 @@
         localStorage.setItem(playerTokenKey, tokenDoNavegador);
         localStorage.setItem(leaderboardCacheKey, JSON.stringify(placarBase));
 
-        submitMsg.textContent = 'Modo local: placar salvo apenas neste navegador.';
-        submitMsg.style.color = 'var(--warning)';
+        submitMsg.textContent = 'Novo recorde!';
+        submitMsg.style.color = 'var(--good)';
         renderLeaderboard(placarBase);
         return;
       }
@@ -1019,7 +1029,7 @@
         localStorage.setItem(playerTokenKey, tokenDoNavegador);
         localStorage.setItem(leaderboardCacheKey, JSON.stringify(placar));
 
-        submitMsg.textContent = foiAtualizado ? 'Novo recorde!' : 'Pontuação já estava salva.';
+        submitMsg.textContent = foiAtualizado ? 'Novo recorde!' : '';
         submitMsg.style.color = foiAtualizado ? 'var(--good)' : 'var(--muted)';
 
         renderLeaderboard(placar);
@@ -1030,8 +1040,8 @@
         localStorage.setItem(syncedScoreKey, String(syncedTime));
         localStorage.setItem(playerTokenKey, tokenDoNavegador);
         localStorage.setItem(leaderboardCacheKey, JSON.stringify(placarBase));
-        submitMsg.textContent = err.message || 'Erro ao conectar. Salvando apenas localmente.';
-        submitMsg.style.color = 'var(--warning)';
+        submitMsg.textContent = 'Novo recorde salvo localmente.';
+        submitMsg.style.color = 'var(--good)';
         renderLeaderboard(placarBase);
       }
     }
@@ -1048,7 +1058,6 @@
       submitMsg.textContent = "";
       checkPlayerAuth();
 
-      // Tentativa de salvar caso tenha acabado de perder e preencheu o nome
       if (state.time > 0 && state.time > syncedTime) {
          autoSaveScore(novoNome, state.time);
       }

@@ -1,7 +1,7 @@
 const JSONBIN_BASE_URL = 'https://api.jsonbin.io/v3/b';
 
 function sendJson(res, statusCode, payload) {
-  res.status(statusCode).json(payload);
+  return res.status(statusCode).json(payload);
 }
 
 function parseBody(req) {
@@ -42,7 +42,8 @@ async function fetchLatestLeaderboard(binUrl, apiKey) {
   throw error;
 }
 
-export default async function handler(req, res) {
+// CORREÇÃO: Utilizando module.exports para garantir compatibilidade com qualquer ambiente Vercel sem quebrar
+module.exports = async function handler(req, res) {
   const apiKey = process.env.JSONBIN_API_KEY;
   const binId = process.env.JSONBIN_BIN_ID;
 
@@ -108,7 +109,7 @@ export default async function handler(req, res) {
           return sendJson(res, 403, { error: 'Token inválido para este nome.' });
         }
 
-        syncedTime = Number.isFinite(tempoAtual) ? tempoAtual : tempo;
+        syncedTime = Number.isFinite(tempoAtual) ? Math.max(tempoAtual, tempo) : tempo;
 
         if (!Number.isFinite(tempoAtual) || tempo > tempoAtual) {
           placar[jogadorIndex] = {
@@ -125,7 +126,8 @@ export default async function handler(req, res) {
         updated = true;
       }
 
-      const mergedRecord = [...placar];
+      // Filtra entradas inválidas e ordena antes de atualizar
+      const mergedRecord = [...placar].filter(p => p && p.nome);
       mergedRecord.sort((a, b) => Number(b.tempo || 0) - Number(a.tempo || 0));
       const record = mergedRecord.slice(0, 10);
 
@@ -159,4 +161,4 @@ export default async function handler(req, res) {
 
   res.setHeader('Allow', 'GET, POST, PUT');
   return sendJson(res, 405, { error: 'Método não permitido.' });
-}
+};
