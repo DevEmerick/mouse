@@ -284,7 +284,6 @@
 
       <div id="authSection" style="position: relative; margin-top: 28px; z-index: 2;">
         
-        <!-- UI: Input de Nome (Aparece se não tiver nome salvo) -->
         <div id="nameInputUI" style="display: block;">
           <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
             <input type="text" id="playerNameInput" placeholder="Seu Nickname" maxlength="15" 
@@ -293,7 +292,6 @@
           </div>
         </div>
 
-        <!-- UI: Área do Jogador (Minimalista) -->
         <div id="autoSaveUI" style="display: none; background: rgba(255,255,255,0.03); border: 1px solid var(--panel-border); border-radius: 16px; padding: 14px; margin: 0 auto 16px auto; max-width: 300px;">
           <p style="margin: 0; font-size: 16px; color: var(--text);">
             Jogador: <strong id="displayName" style="color: var(--accent);"></strong>
@@ -303,13 +301,11 @@
         <div id="submitMsg" style="font-size: 14px; margin-bottom: 16px; font-weight: 600; min-height: 20px;"></div>
       </div>
 
-      <!-- Botões de Ação (Ocultos até colocar o nome) -->
       <div class="actions" id="actionButtons" style="display: none;">
         <button id="startBtn">Iniciar fuga</button>
         <button id="demoBtn" class="ghost">Ver dicas rápidas</button>
       </div>
 
-      <!-- Placar Global -->
       <div id="leaderboardSection" style="position: relative; margin-top: 28px; text-align: left; background: rgba(0,0,0,0.25); border: 1px solid var(--panel-border); padding: 20px; border-radius: 20px; z-index: 2;">
         <h3 style="margin: 0 0 16px 0; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; display: flex; justify-content: space-between;">
           <span>Top 5 Global</span>
@@ -336,7 +332,6 @@
     const bestDisplay = document.getElementById('bestDisplay');
     const toast = document.getElementById('toast');
 
-    // Elementos da UI simplificada
     const playerNameInput = document.getElementById('playerNameInput');
     const registerNameBtn = document.getElementById('registerNameBtn');
     const nameInputUI = document.getElementById('nameInputUI');
@@ -346,7 +341,6 @@
     const leaderboardList = document.getElementById('leaderboardList');
     const actionButtons = document.getElementById('actionButtons');
     
-    // Chaves Locais
     const playerTokenKey = 'mouse-avoid-player-token';
     const savedPlayerNameKey = 'mouse-avoid-player-name';
     const syncedScoreKey = 'mouse-avoid-synced-time';
@@ -441,7 +435,6 @@
       showToast('Boa sorte. O robô aprende enquanto você corre.');
     }
 
-    // --- LÓGICA DE VALIDAÇÃO DE NOME ---
     function checkPlayerAuth() {
       const nome = localStorage.getItem(savedPlayerNameKey);
       if (nome) {
@@ -456,7 +449,6 @@
       }
     }
 
-    // --- LÓGICA DE FIM DE JOGO ---
     function endGame(reason = 'Você foi pego') {
       if (state.ended) return;
       state.running = false;
@@ -485,7 +477,6 @@
       checkPlayerAuth();
       const nomeSalvo = localStorage.getItem(savedPlayerNameKey);
 
-      // Auto-save se tiver nome registrado
       if (nomeSalvo && state.time > syncedTime && state.time > 0) {
          autoSaveScore(nomeSalvo, state.time);
       }
@@ -625,8 +616,18 @@
           const chaseDirX = (lead.x - bot.x) / chaseLen; const chaseDirY = (lead.y - bot.y) / chaseLen;
           const agility = 1 + Math.min(1.2, phase / 25);
           bot.x += chaseDirX * bot.baseSpeed * agility * dt; bot.y += chaseDirY * bot.baseSpeed * agility * dt;
-          if (distance < 160 && botAttackTimer > 0.7) { botAttackTimer = 0; botStateTimer = 0; botState = 'PURSUE'; dashVector = { x: chaseDirX, y: chaseDirY }; spawnParticles(bot.x, bot.y, '#ffb547', 14, 2.0, 160); teleportTarget = null; }
-          else if (botAttackTimer > Math.max(1.2, 2.2 - phase * 0.02)) { botAttackTimer = 0; botStateTimer = 0; botState = chooseBossPattern(); dashVector = { x: chaseDirX, y: chaseDirY }; spawnParticles(bot.x, bot.y, '#e8eefc', 18, 2.2, 170); teleportTarget = null; }
+          
+          // ANTI-TRAPAÇA: Se o player ficar perto, o chefe dispara padrões agressivos aleatórios
+          if (distance < 160 && botAttackTimer > 0.7) { 
+            botAttackTimer = 0; botStateTimer = 0; 
+            botState = chooseBossPattern(); 
+            dashVector = { x: chaseDirX, y: chaseDirY }; 
+            spawnParticles(bot.x, bot.y, '#ffb547', 14, 2.0, 160); 
+            teleportTarget = null; 
+          }
+          else if (botAttackTimer > Math.max(1.2, 2.2 - phase * 0.02)) { 
+            botAttackTimer = 0; botStateTimer = 0; botState = chooseBossPattern(); dashVector = { x: chaseDirX, y: chaseDirY }; spawnParticles(bot.x, bot.y, '#e8eefc', 18, 2.2, 170); teleportTarget = null; 
+          }
           break;
         case 'DASH':
           bot.color = botStateTimer < 0.14 ? '#ffffff' : '#ff5f6d';
@@ -637,8 +638,13 @@
           const aim = getBossAimPoint(phase, 1.6); const pLen = Math.hypot(aim.x - bot.x, aim.y - bot.y) || 1;
           if (botStateTimer < 0.08) bot.color = '#ffb547';
           bot.x += ((aim.x - bot.x) / pLen) * (bot.baseSpeed * 2.2) * dt; bot.y += ((aim.y - bot.y) / pLen) * (bot.baseSpeed * 2.2) * dt;
-          if (botStateTimer > 0.12 && botStateTimer < 0.18) spawnParticles(bot.x, bot.y, '#ffb547', 8, 1.4, 100);
-          if (distance < bot.radius + mouse.radius + 10) spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 2, 320, '#f0f4ff');
+          
+          // ANTI-TRAPAÇA 2: Garante um disparo no meio do dash pra não ser driblado
+          if (botStateTimer > 0.12 && botStateTimer - dt <= 0.12) {
+            spawnParticles(bot.x, bot.y, '#ffb547', 12, 1.5, 120);
+            spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 3, 400 + phase * 2, '#ffb547');
+          }
+
           if (botStateTimer > 0.26) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'SHOOT':
@@ -751,7 +757,6 @@
         enemy.wobble += dt * 5;
         const orbitStr = enemy.type === 'orbiter' ? 0.54 : enemy.type === 'flanker' ? 0.36 : 0.18;
         
-        // Corrigido a distância para a força de anel usar a distância ao jogador, não ao alvo previsto
         const distToPlayer = Math.hypot(mouse.x - enemy.x, mouse.y - enemy.y);
         const ringPull = enemy.type === 'orbiter' ? clamp((distToPlayer - enemy.orbitRadius) / enemy.orbitRadius, -1, 1) * 0.22 : 0;
         
@@ -760,7 +765,6 @@
         const sLen = Math.hypot(sX, sY) || 1; const spdMult = enemy.type === 'hunter' ? 1.18 : enemy.type === 'flanker' ? 1.08 : 1;
         enemy.x += (sX / sLen) * enemy.speed * spdMult * dt; enemy.y += (sY / sLen) * enemy.speed * spdMult * dt;
 
-        // O erro do toque "invisível" estava aqui. Agora calcula a colisão exata com o mouse
         if (distToPlayer < enemy.radius + mouse.radius) { spawnParticles(mouse.x, mouse.y, enemy.hue, 22, 2.6, 230); endGame('Você foi cercado'); return; }
         
         enemy.life -= dt;
@@ -887,8 +891,6 @@
     startBtn.addEventListener('click', startGame); demoBtn.addEventListener('click', () => { showToast('Toque/arraste, fique em movimento e tente prever os dashes.'); });
 
 
-    // --- INTEGRAÇÃO DO PLACAR (FRICTIONLESS) ---
-
     function generateToken() {
       return Math.random().toString(36).substring(2) + Date.now().toString(36);
     }
@@ -901,8 +903,6 @@
       }
       
       const meuNome = localStorage.getItem(savedPlayerNameKey) || "";
-      
-      // FILTRO CORRIGIDO: Valida se a propriedade existe antes de dar o toLowerCase (evita que a tela inteira quebre)
       const placarFiltrado = placarArray.filter(p => p && p.nome && typeof p.nome === 'string' && p.nome.toLowerCase() !== 'glitchbot');
 
       if (placarFiltrado.length === 0) {
@@ -947,7 +947,6 @@
         if (!res.ok) throw new Error('Falha ao carregar o placar');
         const data = await res.json();
         
-        // Garante que é array independente do que o backend retornar
         const placar = Array.isArray(data.record) ? data.record : Array.isArray(data) ? data : [];
         
         localStorage.setItem(leaderboardCacheKey, JSON.stringify(placar)); 
@@ -968,7 +967,7 @@
       try {
         const cache = localStorage.getItem(leaderboardCacheKey);
         placarBase = cache ? JSON.parse(cache) : [];
-        if (!Array.isArray(placarBase)) placarBase = []; // Proteção local adicional
+        if (!Array.isArray(placarBase)) placarBase = []; 
       } catch (error) {
         placarBase = [];
       }
@@ -1063,7 +1062,6 @@
       }
     });
 
-    // --- INICIALIZAÇÃO DA PÁGINA ---
     checkPlayerAuth();
     fetchLeaderboard(false); 
     resizeCanvas();
