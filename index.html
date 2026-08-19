@@ -383,13 +383,22 @@
     let kamehamehas = [];   
     let homingMissiles = []; 
     let pacMans = [];       
+    let powerUps = [];      // Array para os Power-ups
     let spawnTimer = 0;
+    let powerUpSpawnTimer = 0; // Timer para controlar a frequência dos power-ups (sem exageros)
     let botAttackTimer = 0;
     let botState = 'CHASE';
     let botStateTimer = 0;
     let dashVector = { x: 0, y: 0 };
     let teleportTarget = null;
     let titleFlashTimer = 0;
+
+    // Estados Ativos de Power-ups do Jogador
+    let playerBuffs = {
+      shield: false,
+      ghost: false,
+      slowMoTimer: 0
+    };
 
     function rand(min, max) { return Math.random() * (max - min) + min; }
     function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
@@ -422,11 +431,12 @@
 
     function resetGame() {
       bot = { x: 120, y: 120, radius: 18, baseSpeed: 170, color: '#ff5f6d', eyeAngle: 0, attackDelay: 2.0 };
-      projectiles = []; particles = []; enemies = []; bossClones = []; blackHoles = []; slowZones = []; kamehamehas = []; homingMissiles = []; pacMans = [];
-      spawnTimer = 0; botAttackTimer = 0; botState = 'CHASE'; botStateTimer = 0;
+      projectiles = []; particles = []; enemies = []; bossClones = []; blackHoles = []; slowZones = []; kamehamehas = []; homingMissiles = []; pacMans = []; powerUps = [];
+      spawnTimer = 0; powerUpSpawnTimer = 0; botAttackTimer = 0; botState = 'CHASE'; botStateTimer = 0;
       dashVector = { x: 0, y: 0 }; teleportTarget = null; bot.alpha = 1;
       state.shake = 0; state.flash = 0; titleFlashTimer = 0; state.ended = false;
       mouse.visible = true; mouse.vx = 0; mouse.vy = 0; mouse.lastMoveTs = 0;
+      playerBuffs.shield = false; playerBuffs.ghost = false; playerBuffs.slowMoTimer = 0;
       timeDisplay.textContent = '0.0';
       overlay.style.display = 'none';
     }
@@ -553,9 +563,8 @@
       spawnParticles(bot.x, bot.y, '#ff5f6d', 18, 2.0, 200);
     }
 
-    // PAC-MAN BLINDADO: Apenas 1 instância gerada por vez
     function spawnPacMan() {
-      if (pacMans.length > 0) return; // Impede duplicações/multiplicações na tela
+      if (pacMans.length > 0) return; 
 
       const angle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
       pacMans.push({
@@ -587,6 +596,22 @@
         targetAngle: fixedAimAngle
       });
       spawnParticles(bot.x, bot.y, '#66e3ff', 30, 3.0, 250);
+    }
+
+    // Gerador de Power-ups (Aparece a cada 7 segundos, garantindo que não seja exagerado)
+    function spawnPowerUp() {
+      if (powerUps.length >= 2) return; // Limite máximo de 2 na tela para não exagerar
+
+      const types = ['SHIELD', 'GHOST', 'EMP', 'SLOWMO', 'TIMEPLUS'];
+      const chosenType = types[Math.floor(Math.random() * types.length)];
+      
+      powerUps.push({
+        x: rand(60, world.width - 60),
+        y: rand(60, world.height - 60),
+        radius: 18,
+        type: chosenType,
+        life: 10.0 // Desaparece em 10 segundos se não for pego
+      });
     }
 
     function spawnEnemyAt(x, y, type = 'interceptor', forcedSpeed = 0) {
@@ -693,7 +718,18 @@
       bot.baseSpeed = 150 + phase * 4; bot.eyeAngle = Math.atan2(dy, dx);
       botAttackTimer += dt; botStateTimer += dt;
 
-      if (distance < bot.radius + mouse.radius) { spawnParticles(mouse.x, mouse.y, '#ff5f6d', 28, 2.4, 220); endGame(); return; }
+      // Verificação de colisão com o Boss (Respeita o Escudo e a Fase Fantasma)
+      if (distance < bot.radius + mouse.radius) {
+        if (playerBuffs.shield) {
+          playerBuffs.shield = false;
+          spawnParticles(mouse.x, mouse.y, '#66e3ff', 20, 2.0, 200);
+          showToast('Escudo absorveu o impacto!');
+        } else if (!playerBuffs.ghost) {
+          spawnParticles(mouse.x, mouse.y, '#ff5f6d', 28, 2.4, 220); 
+          endGame(); 
+          return;
+        }
+      }
 
       switch (botState) {
         case 'CHASE':
@@ -737,7 +773,7 @@
           if (botStateTimer > 0.26) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
         case 'SHOOT':
-          if (botStateTimer > 0.12 && botStateTimer - dt <= 0.12) { bot.color = '#ffb547'; spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 4, 410, '#ffb547'); }
+          if (botStateTimer > 0.12 && botStateTimer - dt <= 0.12) { bot.color = '#ff5f6d'; spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 4, 410, '#ffb547'); }
           if (botStateTimer > 0.33 && botStateTimer - dt <= 0.33) spawnProjectile(bot.x, bot.y, mouse.x, mouse.y, 260 + phase * 1.4, '#66e3ff');
           if (botStateTimer > 0.54 && botStateTimer - dt <= 0.54) { spawnBossFan(bot.x, bot.y, mouse.x, mouse.y, 4, 500, '#ff5f6d'); bot.color = '#ff5f6d'; }
           if (botStateTimer > 0.86) { botState = 'CHASE'; botStateTimer = 0; bot.color = '#ff5f6d'; }
@@ -857,9 +893,17 @@
         }
 
         if (dist < bh.radius + mouse.radius) {
-          spawnParticles(mouse.x, mouse.y, '#9a47ff', 25, 2.5, 220);
-          endGame('Você foi engolido pelo Buraco Negro');
-          return;
+          if (playerBuffs.shield) {
+            playerBuffs.shield = false;
+            spawnParticles(mouse.x, mouse.y, '#66e3ff', 20, 2.0, 200);
+            showToast('Escudo absorveu o Buraco Negro!');
+            blackHoles.splice(i, 1);
+            continue;
+          } else if (!playerBuffs.ghost) {
+            spawnParticles(mouse.x, mouse.y, '#9a47ff', 25, 2.5, 220);
+            endGame('Você foi engolido pelo Buraco Negro');
+            return;
+          }
         }
 
         if (bh.life <= 0) blackHoles.splice(i, 1);
@@ -903,9 +947,17 @@
         }
 
         if (Math.hypot(mouse.x - hm.x, mouse.y - hm.y) < hm.radius + mouse.radius) {
-          spawnParticles(mouse.x, mouse.y, hm.color, 20, 2.2, 220);
-          endGame('Você foi atingido pelo Foguete Teleguiado');
-          return;
+          if (playerBuffs.shield) {
+            playerBuffs.shield = false;
+            spawnParticles(hm.x, hm.y, '#66e3ff', 20, 2.0, 200);
+            showToast('Escudo absorveu o foguete!');
+            homingMissiles.splice(i, 1);
+            continue;
+          } else if (!playerBuffs.ghost) {
+            spawnParticles(mouse.x, mouse.y, hm.color, 20, 2.2, 220);
+            endGame('Você foi atingido pelo Foguete Teleguiado');
+            return;
+          }
         }
 
         if (hm.life <= 0) {
@@ -915,7 +967,6 @@
       }
     }
 
-    // Pac-Man Consistente: Cresce 25% + acelera +15% por bola comida, sem falhas nem duplicações
     function updatePacMans(dt) {
       for (let i = pacMans.length - 1; i >= 0; i--) {
         const pm = pacMans[i];
@@ -933,36 +984,42 @@
         pm.x += Math.cos(pm.angle) * pm.speed * dt;
         pm.y += Math.sin(pm.angle) * pm.speed * dt;
 
-        // Inimigos comidos
         for (let j = enemies.length - 1; j >= 0; j--) {
           const en = enemies[j];
           if (Math.hypot(pm.x - en.x, pm.y - en.y) < pm.radius + en.radius) {
             spawnParticles(en.x, en.y, '#ffff00', 10, 1.5, 140);
             enemies.splice(j, 1);
             pm.eatenCount++;
-            pm.radius *= 1.25;  // Cresce 25% exatos
-            pm.speed *= 1.15;   // Aumenta 15% de velocidade
+            pm.radius *= 1.25;  
+            pm.speed *= 1.15;   
             break;
           }
         }
 
-        // Projéteis comidos
         for (let j = projectiles.length - 1; j >= 0; j--) {
           const pr = projectiles[j];
           if (Math.hypot(pm.x - pr.x, pm.y - pr.y) < pm.radius + pr.radius) {
             spawnParticles(pr.x, pr.y, '#ffff00', 8, 1.2, 120);
             projectiles.splice(j, 1);
             pm.eatenCount++;
-            pm.radius *= 1.25;  // Cresce 25% exatos
-            pm.speed *= 1.15;   // Aumenta 15% de velocidade
+            pm.radius *= 1.25;  
+            pm.speed *= 1.15;   
             break;
           }
         }
 
         if (Math.hypot(mouse.x - pm.x, mouse.y - pm.y) < pm.radius + mouse.radius) {
-          spawnParticles(mouse.x, mouse.y, '#ffff00', 25, 2.5, 250);
-          endGame('Você foi devorado pelo Pac-Man');
-          return;
+          if (playerBuffs.shield) {
+            playerBuffs.shield = false;
+            spawnParticles(pm.x, pm.y, '#66e3ff', 20, 2.0, 200);
+            showToast('Escudo salvou você do Pac-Man!');
+            pacMans.splice(i, 1);
+            continue;
+          } else if (!playerBuffs.ghost) {
+            spawnParticles(mouse.x, mouse.y, '#ffff00', 25, 2.5, 250);
+            endGame('Você foi devorado pelo Pac-Man');
+            return;
+          }
         }
 
         if (pm.eatenCount >= pm.maxEaten) {
@@ -999,9 +1056,17 @@
         angleDiff = Math.abs(angleDiff);
 
         if (angleDiff < 0.18 && mouseDist < Math.max(world.width, world.height)) {
-          spawnParticles(mouse.x, mouse.y, '#66e3ff', 25, 2.5, 250);
-          endGame('Você foi atingido pelo Kamehameha');
-          return;
+          if (playerBuffs.shield) {
+            playerBuffs.shield = false;
+            spawnParticles(mouse.x, mouse.y, '#66e3ff', 25, 2.5, 250);
+            showToast('Escudo absorveu o Kamehameha!');
+            kamehamehas.splice(i, 1);
+            continue;
+          } else if (!playerBuffs.ghost) {
+            spawnParticles(mouse.x, mouse.y, '#66e3ff', 25, 2.5, 250);
+            endGame('Você foi atingido pelo Kamehameha');
+            return;
+          }
         }
 
         if (kh.activeTimer <= 0) kamehamehas.splice(i, 1);
@@ -1018,8 +1083,71 @@
           p.vy += ((dy / distance) * speed - p.vy) * p.turnRate * dt;
         }
         p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-        if (Math.hypot(mouse.x - p.x, mouse.y - p.y) < p.radius + mouse.radius) { spawnParticles(mouse.x, mouse.y, p.color, 18, 2.2, 220); endGame('Você foi atingido'); return; }
+        
+        if (Math.hypot(mouse.x - p.x, mouse.y - p.y) < p.radius + mouse.radius) {
+          if (playerBuffs.shield) {
+            playerBuffs.shield = false;
+            spawnParticles(mouse.x, mouse.y, '#66e3ff', 20, 2.0, 200);
+            showToast('Escudo absorveu o tiro!');
+            projectiles.splice(i, 1);
+            continue;
+          } else if (!playerBuffs.ghost) {
+            spawnParticles(mouse.x, mouse.y, p.color, 18, 2.2, 220); 
+            endGame('Você foi atingido'); 
+            return;
+          }
+        }
+
         if (p.life <= 0 || p.x < -60 || p.x > world.width + 60 || p.y < -60 || p.y > world.height + 60) projectiles.splice(i, 1);
+      }
+    }
+
+    // Atualização e Lógica de Coleta dos Power-ups
+    function updatePowerUps(dt) {
+      powerUpSpawnTimer += dt;
+      if (powerUpSpawnTimer > 7.0) { // Spawna um novo power-up a cada 7 segundos
+        powerUpSpawnTimer = 0;
+        spawnPowerUp();
+      }
+
+      for (let i = powerUps.length - 1; i >= 0; i--) {
+        const pu = powerUps[i];
+        pu.life -= dt;
+
+        // Se o cursor encostar no power-up
+        if (Math.hypot(mouse.x - pu.x, mouse.y - pu.y) < mouse.radius + pu.radius) {
+          spawnParticles(pu.x, pu.y, '#47e6a3', 20, 2.0, 200);
+
+          switch(pu.type) {
+            case 'SHIELD':
+              playerBuffs.shield = true;
+              showToast('🛡️ Escudo Cibernético Ativado!');
+              break;
+            case 'GHOST':
+              playerBuffs.ghost = true;
+              showToast('👻 Fase Fantasma Ativada (Incorpóreo por 3s)!');
+              setTimeout(() => { playerBuffs.ghost = false; }, 3000);
+              break;
+            case 'EMP':
+              projectiles = [];
+              if (enemies.length > 0) enemies.splice(0, Math.floor(enemies.length / 2));
+              showToast('💣 Bomba EMP: Tela limpa!');
+              break;
+            case 'SLOWMO':
+              playerBuffs.slowMoTimer = 4.0;
+              showToast('⏳ Dilatação Temporal (Slow-Mo Mundial)!');
+              break;
+            case 'TIMEPLUS':
+              state.startTs -= 2500; // Adiciona +2.5s no tempo de sobrevivência
+              showToast('⏱️ Bônus de Tempo Dourado (+2.5s)!');
+              break;
+          }
+
+          powerUps.splice(i, 1);
+          continue;
+        }
+
+        if (pu.life <= 0) powerUps.splice(i, 1);
       }
     }
 
@@ -1034,7 +1162,19 @@
           clone.burstTimer -= dt;
           if (clone.burstTimer <= 0) { spawnHomingProjectile(clone.x, clone.y, mouse.x, mouse.y, 250 + state.time * 2, clone.hue); clone.shotDone = true; }
         }
-        if (distance < clone.radius + mouse.radius) { spawnParticles(mouse.x, mouse.y, clone.hue, 22, 2.6, 230); endGame('Você foi cercado'); return; }
+        if (distance < clone.radius + mouse.radius) {
+          if (playerBuffs.shield) {
+            playerBuffs.shield = false;
+            spawnParticles(mouse.x, mouse.y, '#66e3ff', 20, 2.0, 200);
+            showToast('Escudo destruiu o clone!');
+            bossClones.splice(i, 1);
+            continue;
+          } else if (!playerBuffs.ghost) {
+            spawnParticles(mouse.x, mouse.y, clone.hue, 22, 2.6, 230); 
+            endGame('Você foi cercado'); 
+            return;
+          }
+        }
         if (clone.life <= 0) bossClones.splice(i, 1);
       }
     }
@@ -1063,9 +1203,26 @@
         const sX = dirX * (enemy.turnBias + ringPull) + sepX * 4.5 - dirY * Math.sin(enemy.wobble) * orbitStr;
         const sY = dirY * (enemy.turnBias + ringPull) + sepY * 4.5 + dirX * Math.cos(enemy.wobble) * orbitStr;
         const sLen = Math.hypot(sX, sY) || 1; const spdMult = enemy.type === 'hunter' ? 1.18 : enemy.type === 'flanker' ? 1.08 : 1;
-        enemy.x += (sX / sLen) * enemy.speed * spdMult * dt; enemy.y += (sY / sLen) * enemy.speed * spdMult * dt;
+        
+        // Se o Slow-Mo estiver ativo, reduz a velocidade dos inimigos pela metade
+        const slowFactor = playerBuffs.slowMoTimer > 0 ? 0.5 : 1.0;
 
-        if (distToPlayer < enemy.radius + mouse.radius) { spawnParticles(mouse.x, mouse.y, enemy.hue, 22, 2.6, 230); endGame('Você foi cercado'); return; }
+        enemy.x += (sX / sLen) * enemy.speed * spdMult * slowFactor * dt; 
+        enemy.y += (sY / sLen) * enemy.speed * spdMult * slowFactor * dt;
+
+        if (distToPlayer < enemy.radius + mouse.radius) {
+          if (playerBuffs.shield) {
+            playerBuffs.shield = false;
+            spawnParticles(mouse.x, mouse.y, '#66e3ff', 20, 2.0, 200);
+            showToast('Escudo destruiu o inimigo!');
+            enemies.splice(i, 1);
+            continue;
+          } else if (!playerBuffs.ghost) {
+            spawnParticles(mouse.x, mouse.y, enemy.hue, 22, 2.6, 230); 
+            endGame('Você foi cercado'); 
+            return;
+          }
+        }
         
         enemy.life -= dt;
         if (enemy.life <= 0 || enemy.x < -80 || enemy.x > world.width + 80 || enemy.y < -80 || enemy.y > world.height + 80) {
@@ -1132,6 +1289,46 @@
         ctx.rect(sz.x - sz.width/2, sz.y - sz.height/2, sz.width, sz.height);
         ctx.fill();
         ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // Renderização dos Power-ups com ícones visuais intuitivos
+    function drawPowerUps() {
+      for (const pu of powerUps) {
+        ctx.save();
+        ctx.translate(pu.x, pu.y);
+
+        let color = '#47e6a3';
+        let iconText = '⚡';
+
+        if (pu.type === 'SHIELD') { color = '#66e3ff'; iconText = '🛡️'; }
+        else if (pu.type === 'GHOST') { color = '#9a47ff'; iconText = '👻'; }
+        else if (pu.type === 'EMP') { color = '#ff5f6d'; iconText = '💣'; }
+        else if (pu.type === 'SLOWMO') { color = '#ffb547'; iconText = '⏳'; }
+        else if (pu.type === 'TIMEPLUS') { color = '#ffff00'; iconText = '⏱️'; }
+
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = color;
+
+        // Anel exterior brilhante pulsando levemente
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, pu.radius + Math.sin(Date.now() * 0.01) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(12, 17, 34, 0.85)';
+        ctx.beginPath();
+        ctx.arc(0, 0, pu.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Desenha o ícone representativo centralizado
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(iconText, 0, 1);
+
         ctx.restore();
       }
     }
@@ -1234,9 +1431,26 @@
       }
     }
 
+    // Renderização do Cursor com indicador visual se o Escudo ou Fase Fantasma estiverem ativos
     function drawCursor() {
       if (!mouse.visible) return;
-      ctx.save(); ctx.shadowBlur = 24; ctx.shadowColor = 'rgba(102, 227, 255, 0.65)';
+      ctx.save(); 
+
+      // Efeito visual se a Fase Fantasma estiver ativa
+      if (playerBuffs.ghost) {
+        ctx.shadowBlur = 20; ctx.shadowColor = '#9a47ff';
+        ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 16, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(154, 71, 255, 0.35)'; ctx.fill();
+      }
+
+      // Efeito visual se o Escudo estiver ativo
+      if (playerBuffs.shield) {
+        ctx.shadowBlur = 20; ctx.shadowColor = '#66e3ff';
+        ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 20, 0, Math.PI * 2);
+        ctx.strokeStyle = '#66e3ff'; ctx.lineWidth = 2.5; ctx.setLineDash([4, 4]); ctx.stroke();
+      }
+
+      ctx.shadowBlur = 24; ctx.shadowColor = 'rgba(102, 227, 255, 0.65)';
       ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 6, 0, Math.PI * 2); ctx.fillStyle = '#66e3ff'; ctx.fill();
       ctx.shadowBlur = 0; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 14, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(102, 227, 255, 0.22)'; ctx.lineWidth = 2; ctx.stroke();
       ctx.restore();
@@ -1313,6 +1527,10 @@
       state.lastTs = ts; state.time = (ts - state.startTs) / 1000;
       timeDisplay.textContent = state.time.toFixed(1);
 
+      if (playerBuffs.slowMoTimer > 0) {
+        playerBuffs.slowMoTimer -= dt;
+      }
+
       spawnTimer += dt; botAttackTimer += dt; titleFlashTimer += dt;
       if (spawnTimer > Math.max(1.2, 2.6 - state.time * 0.06)) { spawnTimer = 0; if (enemies.length < 8) spawnEnemy(); }
       state.shake = (state.time > 12 && state.time % 5 < dt) ? Math.min(1, state.shake + 0.15) : Math.max(0, state.shake - dt * 0.6);
@@ -1320,6 +1538,7 @@
       updateBot(dt); 
       updateBlackHoles(dt);
       updateSlowZones(dt);
+      updatePowerUps(dt); // Atualiza os power-ups no mapa
       updateHomingMissiles(dt);
       updatePacMans(dt);
       updateKamehamehas(dt);
@@ -1332,6 +1551,7 @@
       drawBackground(); 
       drawBlackHoles();
       drawSlowZones();
+      drawPowerUps(); // Renderiza os power-ups no mapa
       drawHomingMissiles();
       drawPacMans();
       drawKamehamehas();
