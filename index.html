@@ -380,7 +380,7 @@
     let bossClones = [];
     let blackHoles = [];    
     let slowZones = [];     
-    let kamehamehas = [];   // Kamehameha balanceado
+    let kamehamehas = [];   
     let spawnTimer = 0;
     let botAttackTimer = 0;
     let botState = 'CHASE';
@@ -536,13 +536,13 @@
       spawnParticles(x, y, '#ffb547', 10, 1.5, 100);
     }
 
-    // KAMEHAMEHA BALANCEADO: 1.6s de aviso prévio (leque estreito) e limpeza tática leve
+    // KAMEHAMEHA COM AIMBOT JUSTO: Trava a mira prematuramente e dá margem de escape
     function spawnKamehameha() {
       if (projectiles.length > 4) projectiles.splice(0, Math.floor(projectiles.length / 2));
       if (enemies.length > 3) enemies.splice(0, Math.floor(enemies.length / 2));
 
       kamehamehas.push({
-        warningTimer: 1.6, // Tempo aumentado para dar tempo de desviar confortavelmente
+        warningTimer: 1.6, // 1.6s de aviso para o jogador escapar da linha de tiro
         activeTimer: 0.8,  
         angle: 0
       });
@@ -775,7 +775,6 @@
             bot.color = '#66e3ff';
             spawnKamehameha();
           }
-          // Tempo de duração total da habilidade ajustado para casar com o aviso maior
           if (botStateTimer > 2.4) { bot.color = '#ff5f6d'; botState = 'CHASE'; botStateTimer = 0; }
           break;
       }
@@ -820,13 +819,16 @@
       }
     }
 
+    // AIMBOT JUSTO: A mira trava antes de disparar e tem tolerância de desvio humana
     function updateKamehamehas(dt) {
       for (let i = kamehamehas.length - 1; i >= 0; i--) {
         const kh = kamehamehas[i];
         
         if (kh.warningTimer > 0) {
           kh.warningTimer -= dt;
-          kh.angle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
+          // Trava a mira suavemente com um leve atraso (simulando tempo de reação humano)
+          const targetAngle = Math.atan2(mouse.y - bot.y, mouse.x - bot.x);
+          kh.angle += (targetAngle - kh.angle) * (dt * 4); 
           continue;
         }
 
@@ -841,8 +843,8 @@
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         angleDiff = Math.abs(angleDiff);
 
-        // Faixa de colisão estreita e justa
-        if (angleDiff < 0.25 && mouseDist < Math.max(world.width, world.height)) {
+        // Tolerância de ângulo ajustada para dar chance real de esquiva lateral
+        if (angleDiff < 0.18 && mouseDist < Math.max(world.width, world.height)) {
           spawnParticles(mouse.x, mouse.y, '#66e3ff', 25, 2.5, 250);
           endGame('Você foi atingido pelo Kamehameha');
           return;
@@ -980,7 +982,6 @@
       }
     }
 
-    // Leque de mira mais estreito e limpo
     function drawKamehamehas() {
       for (const kh of kamehamehas) {
         ctx.save();
@@ -991,7 +992,7 @@
           ctx.lineWidth = 2;
           ctx.setLineDash([6, 6]);
           
-          const spreadAngle = 0.22; // Leque mais fechado e justo
+          const spreadAngle = 0.18; // Feixe de mira bem focado
           ctx.beginPath();
           ctx.moveTo(bot.x, bot.y);
           ctx.lineTo(bot.x + Math.cos(kh.angle - spreadAngle) * maxDist, bot.y + Math.sin(kh.angle - spreadAngle) * maxDist);
