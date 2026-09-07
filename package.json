@@ -1,0 +1,16 @@
+{
+  "name": "mouse",
+  "version": "1.0.0",
+  "description": "Mouse avoider game with leaderboard",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Static site - no build needed'",
+    "lint": "echo 'No linter configured'"
+  },
+  "keywords": ["game", "mouse", "avoider"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@vercel/analytics": "^1.3.1"
+  }
+}
